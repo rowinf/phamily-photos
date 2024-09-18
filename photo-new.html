@@ -1,4 +1,12 @@
-<form action="/photo" method="POST">
-<label>photo<input type="file" name="photo"></label>
-<button type="submit">submit</button>
+<form action="/photo" method="POST" enctype="multipart/form-data">
+    <legend>Upload your photos here</legend>
+    <fieldset>
+        <label for="title">Title</label>
+        <input name="title" type="text">
+
+        <label for="photo">photo</label>
+        <input type="file" name="photo">
+    </fieldset>
+
+    <button type="submit">submit</button>
 </form>

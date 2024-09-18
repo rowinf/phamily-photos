@@ -1,8 +1,11 @@
 package main
 
 import (
+	"crypto/rand"
 	"fmt"
+	"io"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,6 +14,8 @@ import (
 	"github.com/donseba/go-htmx"
 	"github.com/donseba/go-htmx/middleware"
 	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/rowinf/phamily-photos/internal"
 )
 
 type (
@@ -32,11 +37,13 @@ func main() {
 	filesDir := http.Dir(filepath.Join(workDir, "assets", "upload"))
 
 	mux.Use(middleware.MiddleWare)
+	mux.Use(chimiddleware.Logger)
 	mux.Get("/", app.Home)
 	mux.Get("/child", app.Child)
 	mux.Get("/photo/new", app.PhotoNew)
 	mux.Get("/photo", app.Photo)
-	FileServer(mux, "/uploads", filesDir)
+	mux.Post("/photo", app.PhotoCreate)
+	FileServer(mux, "/assets/upload", filesDir)
 
 	err := http.ListenAndServe(":3210", mux)
 	log.Fatal(err)
@@ -96,6 +103,72 @@ func (a *App) Photo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+const maxUploadSize = 2 * 1024 * 1024 // 2 MB
+const uploadPath = "./assets/upload"
+
+func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request) {
+	h := a.htmx.NewHandler(w, r)
+	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+		fmt.Printf("Could not parse multipart form: %v\n", err)
+		internal.RespondWithError(w, http.StatusInternalServerError, "CANT_PARSE_FORM")
+		return
+	}
+	file, fileHeader, err := r.FormFile("photo")
+	if err != nil {
+		internal.RespondWithError(w, http.StatusBadRequest, "INVALID_FILE")
+		return
+	}
+	defer file.Close()
+	fileSize := fileHeader.Size
+	fmt.Printf("File size (bytes): %v\n", fileSize)
+	if fileSize > maxUploadSize {
+		internal.RespondWithError(w, http.StatusBadRequest, "FILE_TOO_BIG")
+		return
+	}
+
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		internal.RespondWithError(w, http.StatusBadRequest, "INVALID_FILE")
+		return
+	}
+
+	detectedFileType := http.DetectContentType(fileBytes)
+	switch detectedFileType {
+	case "image/jpeg", "image/jpg":
+	case "image/gif", "image/png":
+	case "application/pdf":
+		break
+	default:
+		internal.RespondWithError(w, http.StatusBadRequest, "INVALID_FILE_TYPE")
+		return
+	}
+	fileName := randToken(12)
+	fileEndings, err := mime.ExtensionsByType(detectedFileType)
+	if err != nil {
+		internal.RespondWithError(w, http.StatusInternalServerError, "CANT_READ_FILE_TYPE")
+		return
+	}
+	newPath := filepath.Join(uploadPath, fileName+fileEndings[0])
+	fmt.Printf("FileType: %s, File: %s\n", detectedFileType, newPath)
+	// write the file to disk: newPath, fileBytes
+	werr := os.WriteFile(newPath, fileBytes, 0644)
+	if werr != nil {
+		internal.RespondWithError(w, http.StatusInternalServerError, "WRITE_FAILED")
+		return
+	}
+
+	data := map[string]any{
+		"Title": "Photo Title",
+		"Url":   newPath,
+	}
+	page := htmx.NewComponent("photo.html").SetData(data).Wrap(mainContent(), "Content")
+
+	_, herr := h.Render(r.Context(), page)
+	if herr != nil {
+		fmt.Printf("error rendering page: %v", err.Error())
+	}
+}
+
 // FileServer conveniently sets up a http.FileServer handler to serve
 // static files from a http.FileSystem.
 func FileServer(r chi.Router, path string, root http.FileSystem) {
@@ -133,4 +206,10 @@ func mainContent() htmx.RenderableComponent {
 
 	sidebar := htmx.NewComponent("sidebar.html")
 	return htmx.NewComponent("index.html").SetData(data).With(sidebar, "Sidebar")
+}
+
+func randToken(len int) string {
+	b := make([]byte, len)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)
 }
