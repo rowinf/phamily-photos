@@ -1,0 +1,11 @@
+version: '3'
+
+dotenv: ['.env']
+
+tasks:
+  dev:
+    desc: Start air to auto-rebuild and restart the Go app on file changes
+    cmds:
+      - air
+    interactive: true
+
