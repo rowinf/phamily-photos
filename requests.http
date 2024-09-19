@@ -1,0 +1,20 @@
+@host=http://localhost:8080
+###
+# @name create_user
+POST {{host}}/v1/users
+Content-Type: application/json
+{
+  "name": "Rob"
+}
+{{
+  $global.apikey=response.parsedBody.apikey
+}}
+
+###
+# @name get_users
+GET {{host}}/v1/users
+Content-Type: application/json
+Authorization: ApiKey {{$global.apikey}}
+{{
+  $global.apikey2=response.parsedBody.apikey
+}}

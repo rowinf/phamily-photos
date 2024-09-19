@@ -18,3 +18,4 @@ vendor/
 phamily-photos
 tmp/main
 tmp/build-errors.log
+.env

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ .Data.Title }}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
     <script src="https://unpkg.com/htmx.org@2.0.0"></script>
     <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
     <style>
@@ -18,9 +18,9 @@
         }
     </style>
 </head>
-<body class="bg-gray-200 p-10">
-    <div class="max-w-xl mx-auto ">
-        <h1 class="text-3xl mb-5 flex justify-center"><span>partial and full page loading example</span></h1>
+<body>
+    <main class="container">
+        <h1><span>Phamily Photos</span></h1>
 
         <div class="flex">
             <div class="flex-none w-48">
@@ -30,6 +30,6 @@
                 {{ .Partials.Content }}
             </div>
         </div>
-    </div>
+    </main>
 </body>
 </html>

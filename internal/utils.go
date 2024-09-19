@@ -2,8 +2,10 @@ package internal
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"strings"
 )
 
 func RespondWithError(w http.ResponseWriter, code int, message string) {
@@ -38,4 +40,17 @@ func RespondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	w.Write(dat)
+}
+
+func GetHeaderApiKey(_ http.ResponseWriter, r *http.Request) (string, error) {
+	auth := r.Header.Get("Authorization")
+	parts := strings.Split(auth, " ")
+	var key string
+	var err error
+	if len(parts) < 2 {
+		err = errors.New("missing Authorization header")
+	} else {
+		key = parts[1]
+	}
+	return key, err
 }

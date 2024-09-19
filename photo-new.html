@@ -5,7 +5,16 @@
         <input name="title" type="text">
 
         <label for="photo">photo</label>
-        <input type="file" name="photo">
+        <input type="file" name="photo" multiple _="
+            on change(target)
+                repeat target.files.length times index i
+                    put `${target.files.item(i).lastModified}\n` at the end of next <textarea/>
+                end
+            end
+        ">
+
+        <label for="meta"></label>
+        <textarea name="meta" readonly></textarea>
     </fieldset>
 
     <button type="submit">submit</button>
