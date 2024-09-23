@@ -1,0 +1,3 @@
+<div>{{ .Data.Title }}</div>
+<img src="{{.Data.Url}}">
+{{ range .Data.Photos}}<img src="{{.Url}}">{{else}}<div>no photos</div>{{end}}

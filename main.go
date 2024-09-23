@@ -1,13 +1,10 @@
 package main
 
 import (
-	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -45,8 +42,9 @@ type PhotoParams struct {
 
 type (
 	App struct {
-		htmx *htmx.HTMX
-		DB   *database.Queries
+		htmx   *htmx.HTMX
+		DB     *database.Queries
+		Router chi.Router
 	}
 )
 
@@ -59,28 +57,30 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-	// new app with htmx instance
-	app := &App{
-		htmx: htmx.New(),
-		DB:   database.New(db),
-	}
 
 	mux := chi.NewRouter()
+	// new app with htmx instance
+	app := &App{
+		htmx:   htmx.New(),
+		DB:     database.New(db),
+		Router: mux,
+	}
 
 	htmx.UseTemplateCache = false
 	workDir, _ := os.Getwd()
-	filesDir := http.Dir(filepath.Join(workDir, "assets", "upload"))
+	filesDir := http.Dir(filepath.Join(workDir, "assets", "uploads"))
 
 	mux.Use(middleware.MiddleWare)
 	mux.Use(chimiddleware.Logger)
 	mux.Get("/", app.Home)
 	mux.Get("/child", app.Child)
-	mux.Get("/photo/new", app.PhotoNew)
-	mux.Get("/photo", app.Photo)
-	mux.Post("/photo", app.middlewareAuth(app.PhotoCreate))
+	mux.Get("/photos", app.middlewareAuth(app.GetPhotosIndex))
+	mux.Get("/photos/new", app.GetPhotoNew)
+	mux.Get("/photos/{photoID}", app.GetPhoto)
+	mux.Post("/photos", app.middlewareAuth(app.PhotoCreate))
 	mux.Post("/v1/users", app.usersCreate)
 	mux.Get("/v1/users", app.middlewareAuth(app.usersGet))
-	FileServer(mux, "/assets/upload", filesDir)
+	FileServer(mux, "/assets/uploads", filesDir)
 	err = http.ListenAndServe(":"+port, mux)
 	log.Fatal(err)
 }
@@ -115,7 +115,7 @@ func (a *App) Child(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *App) PhotoNew(w http.ResponseWriter, r *http.Request) {
+func (a *App) GetPhotoNew(w http.ResponseWriter, r *http.Request) {
 	h := a.htmx.NewHandler(w, r)
 	page := htmx.NewComponent("photo-new.html").Wrap(mainContent(), "Content")
 
@@ -125,11 +125,30 @@ func (a *App) PhotoNew(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *App) Photo(w http.ResponseWriter, r *http.Request) {
+func (a *App) GetPhotosIndex(w http.ResponseWriter, r *http.Request, user database.User) {
+	h := a.htmx.NewHandler(w, r)
+	photos, _ := a.DB.GetPhotosByUser(r.Context(), database.GetPhotosByUserParams{
+		ID:    user.ID,
+		Limit: 10,
+	})
+	data := map[string]any{
+		"Title":  "Photos Title",
+		"Url":    "/assets/uploads/Lake-Sherwood1.jpg",
+		"Photos": photos,
+	}
+	page := htmx.NewComponent("views/photos-index.html").SetData(data).Wrap(mainContent(), "Content")
+
+	_, err := h.Render(r.Context(), page)
+	if err != nil {
+		fmt.Printf("error rendering page: %v", err.Error())
+	}
+}
+
+func (a *App) GetPhoto(w http.ResponseWriter, r *http.Request) {
 	h := a.htmx.NewHandler(w, r)
 	data := map[string]any{
 		"Title": "Photo Title",
-		"Url":   "/uploads/Lake-Sherwood1.jpg",
+		"Url":   "/assets/uploads/Lake-Sherwood1.jpg",
 	}
 	page := htmx.NewComponent("photo.html").SetData(data).Wrap(mainContent(), "Content")
 
@@ -185,88 +204,38 @@ func (a *App) middlewareAuth(handler authedHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		apiKey, err := internal.GetHeaderApiKey(w, r)
 		if err != nil {
-			internal.RespondWithError(w, http.StatusBadRequest, "no api key")
-		} else {
-			user, uerr := a.DB.GetUserByApiKey(r.Context(), apiKey)
-			if uerr != nil {
-				internal.RespondWithError(w, http.StatusBadRequest, "invalid api key")
-			} else {
-				handler(w, r, user)
-			}
+			internal.RespondWithError(w, http.StatusUnauthorized, "no api key")
+			return
 		}
+		user, uerr := a.DB.GetUserByApiKey(r.Context(), apiKey)
+		if uerr != nil {
+			internal.RespondWithError(w, http.StatusUnauthorized, "invalid api key")
+			return
+		}
+		handler(w, r, user)
 	}
 }
 
-const maxUploadSize = 2 * 1024 * 1024 // 2 MB
-const uploadPath = "./assets/upload"
-
 func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.User) {
 	h := a.htmx.NewHandler(w, r)
-	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
-		fmt.Printf("Could not parse multipart form: %v\n", err)
-		internal.RespondWithError(w, http.StatusInternalServerError, "CANT_PARSE_FORM")
-		return
+	assetPath := filepath.Join("assets", "uploads")
+	sysPath := internal.UploadFileHandler(w, r, assetPath)
+	info, err := os.Stat(sysPath)
+	if err != nil || info == nil {
+		internal.RespondWithError(w, http.StatusInternalServerError, err.Error())
 	}
-	file, fileHeader, err := r.FormFile("photo")
-	if err != nil {
-		internal.RespondWithError(w, http.StatusBadRequest, "INVALID_FILE")
-		return
-	}
-	defer file.Close()
-	fileSize := fileHeader.Size
-	fmt.Printf("File size (bytes): %v\n", fileSize)
-	if fileSize > maxUploadSize {
-		internal.RespondWithError(w, http.StatusBadRequest, "FILE_TOO_BIG")
-		return
-	}
+	paths := strings.Split(sysPath, "/")
+	fileName := paths[len(paths)-1]
+	newPath := filepath.Join("/", assetPath, fileName)
 
-	fileBytes, err := io.ReadAll(file)
-	if err != nil {
-		internal.RespondWithError(w, http.StatusBadRequest, "INVALID_FILE")
-		return
-	}
-
-	detectedFileType := http.DetectContentType(fileBytes)
-	switch detectedFileType {
-	case "image/jpeg", "image/jpg":
-	case "image/gif", "image/png":
-	case "application/pdf":
-		break
-	default:
-		internal.RespondWithError(w, http.StatusBadRequest, "INVALID_FILE_TYPE")
-		return
-	}
-	fileName := randToken(12)
-	fileEndings, err := mime.ExtensionsByType(detectedFileType)
-	if err != nil {
-		internal.RespondWithError(w, http.StatusInternalServerError, "CANT_READ_FILE_TYPE")
-		return
-	}
-	newPath := filepath.Join(uploadPath, fileName+fileEndings[0])
-	fmt.Printf("FileType: %s, File: %s\n", detectedFileType, newPath)
-	// write the file to disk: newPath, fileBytes
-	newFile, cerr := os.Create(newPath)
-	if cerr != nil {
-		internal.RespondWithError(w, http.StatusInternalServerError, "CANT_WRITE_FILE")
-		return
-	}
-	defer newFile.Close()
-	if _, err := newFile.Write(fileBytes); err != nil || newFile.Close() != nil {
-		internal.RespondWithError(w, http.StatusInternalServerError, "CANT_WRITE_FILE")
-		return
-	}
-	info, ferr := newFile.Stat()
-	if ferr != nil {
-		internal.RespondWithError(w, http.StatusInternalServerError, ferr.Error())
-	}
 	photo, perr := a.DB.CreatePhoto(r.Context(), database.CreatePhotoParams{
 		ID:         uuid.NewString(),
 		UserID:     user.ID,
 		Url:        newPath,
 		ThumbUrl:   newPath,
 		ModifiedAt: info.ModTime(),
-		Name:       newFile.Name(),
-		AltText:    newFile.Name(),
+		Name:       info.Name(),
+		AltText:    info.Name(),
 	})
 	if perr != nil {
 		internal.RespondWithError(w, http.StatusInternalServerError, perr.Error())
@@ -312,6 +281,8 @@ func mainContent() htmx.RenderableComponent {
 	}{
 		{"Home", "/"},
 		{"Child", "/child"},
+		{"Photos", "/photos"},
+		{"New", "/photos/new"},
 	}
 
 	data := map[string]any{
@@ -321,10 +292,4 @@ func mainContent() htmx.RenderableComponent {
 
 	sidebar := htmx.NewComponent("sidebar.html")
 	return htmx.NewComponent("index.html").SetData(data).With(sidebar, "Sidebar")
-}
-
-func randToken(len int) string {
-	b := make([]byte, len)
-	rand.Read(b)
-	return fmt.Sprintf("%x", b)
 }

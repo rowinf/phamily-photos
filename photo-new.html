@@ -1,4 +1,5 @@
-<form action="/photo" method="POST" enctype="multipart/form-data">
+<form action="/photos" method="POST" enctype="multipart/form-data" hx-encoding='multipart/form-data' hx-post='/photos'
+    _='on htmx:xhr:progress(loaded, total) set #progress.value to (loaded/total)*100'>
     <legend>Upload your photos here</legend>
     <fieldset>
         <label for="title">Title</label>
@@ -18,4 +19,5 @@
     </fieldset>
 
     <button type="submit">submit</button>
+    <progress id='progress' value='0' max='100'></progress>
 </form>

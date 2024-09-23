@@ -18,10 +18,8 @@
         }
     </style>
 </head>
-<body>
+<body _="init js htmx.on('htmx:configRequest', (e) => e.detail.headers['Authorization'] = localStorage.getItem('authToken')) end">
     <main class="container">
-        <h1><span>Phamily Photos</span></h1>
-
         <div class="flex">
             <div class="flex-none w-48">
                 {{ .Partials.Sidebar }}
