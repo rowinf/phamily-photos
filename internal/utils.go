@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/donseba/go-htmx"
 )
 
 func RespondWithError(w http.ResponseWriter, code int, message string) {
@@ -32,6 +34,27 @@ func RespondWithError(w http.ResponseWriter, code int, message string) {
 	w.Write(dat)
 }
 
+func RespondWithErrorHtmx(h *htmx.Handler, w http.ResponseWriter, code int, message string) {
+	type errorBody struct {
+		Error string `json:"error"`
+	}
+
+	errBody := errorBody{
+		Error: message,
+	}
+	dat, err := json.Marshal(errBody)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if h.IsHxRequest() {
+		h.TriggerError(message)
+	}
+	w.WriteHeader(code)
+	w.Write(dat)
+}
+
 func RespondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	var dat []byte
 	var err error
@@ -46,6 +69,10 @@ func RespondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	w.Write(dat)
+}
+
+func RespondWithOk(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusOK)
 }
 
 func GetHeaderApiKey(_ http.ResponseWriter, r *http.Request) (string, error) {

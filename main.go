@@ -73,10 +73,11 @@ func main() {
 	mux.Use(middleware.MiddleWare)
 	mux.Use(chimiddleware.Logger)
 	mux.Get("/", app.Home)
-	mux.Get("/child", app.Child)
 	mux.Get("/photos", app.middlewareAuth(app.GetPhotosIndex))
 	mux.Get("/photos/new", app.GetPhotoNew)
-	mux.Get("/photos/{photoID}", app.GetPhoto)
+	mux.Get("/family", app.middlewareAuth(app.FamiliesGet))
+	mux.Delete("/photos/{photoID}", app.middlewareAuth(app.DeletePhoto))
+	mux.Get("/photos/{photoID}", app.middlewareAuth(app.GetPhoto))
 	mux.Post("/photos", app.middlewareAuth(app.PhotoCreate))
 	mux.Post("/v1/users", app.usersCreate)
 	mux.Get("/v1/users", app.middlewareAuth(app.usersGet))
@@ -92,22 +93,7 @@ func (a *App) Home(w http.ResponseWriter, r *http.Request) {
 		"Text": "Welcome to the home geiiiii",
 	}
 
-	page := htmx.NewComponent("home.html").SetData(data).Wrap(mainContent(), "Content")
-
-	_, err := h.Render(r.Context(), page)
-	if err != nil {
-		fmt.Printf("error rendering page: %v", err.Error())
-	}
-}
-
-func (a *App) Child(w http.ResponseWriter, r *http.Request) {
-	h := a.htmx.NewHandler(w, r)
-
-	data := map[string]any{
-		"Text": "Welcome to the child page",
-	}
-
-	page := htmx.NewComponent("child.html").SetData(data).Wrap(mainContent(), "Content")
+	page := htmx.NewComponent("views/home.html").SetData(data).Wrap(mainContent(), "Content")
 
 	_, err := h.Render(r.Context(), page)
 	if err != nil {
@@ -117,7 +103,7 @@ func (a *App) Child(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) GetPhotoNew(w http.ResponseWriter, r *http.Request) {
 	h := a.htmx.NewHandler(w, r)
-	page := htmx.NewComponent("photo-new.html").Wrap(mainContent(), "Content")
+	page := htmx.NewComponent("views/photo-new.html").Wrap(mainContent(), "Content")
 
 	_, err := h.Render(r.Context(), page)
 	if err != nil {
@@ -127,14 +113,16 @@ func (a *App) GetPhotoNew(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) GetPhotosIndex(w http.ResponseWriter, r *http.Request, user database.User) {
 	h := a.htmx.NewHandler(w, r)
-	photos, _ := a.DB.GetPhotosByUser(r.Context(), database.GetPhotosByUserParams{
-		ID:    user.ID,
-		Limit: 10,
+	photos, _ := a.DB.GetPhotosByUserFamily(r.Context(), database.GetPhotosByUserFamilyParams{
+		UserID: user.ID,
+		Limit:  10,
 	})
+
 	data := map[string]any{
-		"Title":  "Photos Title",
-		"Url":    "/assets/uploads/Lake-Sherwood1.jpg",
-		"Photos": photos,
+		"Title":      "Photos Title",
+		"Url":        "/assets/uploads/Lake-Sherwood1.jpg",
+		"Photos":     photos,
+		"FormatDate": formatDate,
 	}
 	page := htmx.NewComponent("views/photos-index.html").SetData(data).Wrap(mainContent(), "Content")
 
@@ -144,15 +132,37 @@ func (a *App) GetPhotosIndex(w http.ResponseWriter, r *http.Request, user databa
 	}
 }
 
-func (a *App) GetPhoto(w http.ResponseWriter, r *http.Request) {
-	h := a.htmx.NewHandler(w, r)
-	data := map[string]any{
-		"Title": "Photo Title",
-		"Url":   "/assets/uploads/Lake-Sherwood1.jpg",
+func (a *App) DeletePhoto(w http.ResponseWriter, r *http.Request, user database.User) {
+	err := a.DB.DeletePhoto(r.Context(), database.DeletePhotoParams{
+		ID:     r.PathValue("photoID"),
+		UserID: user.ID,
+	})
+	if err != nil {
+		internal.RespondWithError(w, http.StatusNotFound, "not found")
+		return
 	}
-	page := htmx.NewComponent("photo.html").SetData(data).Wrap(mainContent(), "Content")
+	internal.RespondWithOk(w)
+}
 
-	_, err := h.Render(r.Context(), page)
+func (a *App) GetPhoto(w http.ResponseWriter, r *http.Request, user database.User) {
+	h := a.htmx.NewHandler(w, r)
+	photo, err := a.DB.GetPhoto(r.Context(), database.GetPhotoParams{
+		ID:     r.PathValue("photoID"),
+		UserID: user.ID,
+	})
+	if err != nil {
+		internal.RespondWithError(w, http.StatusNotFound, "not found")
+		return
+	}
+	data := map[string]any{
+		"User":       user,
+		"Photo":      photo,
+		"IsMyPhoto":  photo.IsMyPhoto,
+		"FormatDate": formatDate,
+	}
+	page := htmx.NewComponent("views/photo.html").SetData(data).Wrap(mainContent(), "Content")
+
+	_, err = h.Render(r.Context(), page)
 	if err != nil {
 		fmt.Printf("error rendering page: %v", err.Error())
 	}
@@ -239,13 +249,31 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 	})
 	if perr != nil {
 		internal.RespondWithError(w, http.StatusInternalServerError, perr.Error())
+		return
 	}
 	data := map[string]any{
-		"Photo": photo,
-		"Title": "Photo Title",
-		"Url":   newPath,
+		"User":       user,
+		"Photo":      photo,
+		"FormatDate": formatDate,
 	}
-	page := htmx.NewComponent("photo.html").SetData(data).Wrap(mainContent(), "Content")
+	page := htmx.NewComponent("views/photo.html").SetData(data).Wrap(mainContent(), "Content")
+
+	_, err = h.Render(r.Context(), page)
+	if err != nil {
+		fmt.Printf("error rendering page: %v", err.Error())
+	}
+}
+
+func (a *App) FamiliesGet(w http.ResponseWriter, r *http.Request, user database.User) {
+	h := a.htmx.NewHandler(w, r)
+	family, err := a.DB.GetUserFamily(r.Context(), user.ID)
+	if err != nil {
+		internal.RespondWithErrorHtmx(h, w, http.StatusNotFound, "no family")
+	}
+	data := map[string]any{
+		"Family": family,
+	}
+	page := htmx.NewComponent("views/family.html").SetData(data).Wrap(mainContent(), "Content")
 
 	_, herr := h.Render(r.Context(), page)
 	if herr != nil {
@@ -280,9 +308,9 @@ func mainContent() htmx.RenderableComponent {
 		Link string
 	}{
 		{"Home", "/"},
-		{"Child", "/child"},
 		{"Photos", "/photos"},
 		{"New", "/photos/new"},
+		{"Family", "/family"},
 	}
 
 	data := map[string]any{
@@ -290,6 +318,10 @@ func mainContent() htmx.RenderableComponent {
 		"MenuItems": menuItems,
 	}
 
-	sidebar := htmx.NewComponent("sidebar.html")
-	return htmx.NewComponent("index.html").SetData(data).With(sidebar, "Sidebar")
+	sidebar := htmx.NewComponent("views/sidebar.html")
+	return htmx.NewComponent("views/index.html").SetData(data).With(sidebar, "Sidebar")
+}
+
+func formatDate(t time.Time) string {
+	return t.Format(time.DateOnly)
 }

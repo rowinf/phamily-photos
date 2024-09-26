@@ -5,8 +5,17 @@
 package database
 
 import (
+	"database/sql"
 	"time"
 )
+
+type Family struct {
+	ID          int64
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Name        string
+	Description string
+}
 
 type Photo struct {
 	ID         string
@@ -26,4 +35,5 @@ type User struct {
 	UpdatedAt time.Time
 	Name      string
 	Apikey    string
+	FamilyID  sql.NullInt64
 }

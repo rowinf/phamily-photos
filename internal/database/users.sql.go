@@ -13,7 +13,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, created_at, updated_at, name, apikey)
 VALUES ($1, $2, $3, $4, encode(sha256(random()::text::bytea), 'hex'))
-RETURNING id, created_at, updated_at, name, apikey
+RETURNING id, created_at, updated_at, name, apikey, family_id
 `
 
 type CreateUserParams struct {
@@ -37,12 +37,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.Name,
 		&i.Apikey,
+		&i.FamilyID,
 	)
 	return i, err
 }
 
 const getUserByApiKey = `-- name: GetUserByApiKey :one
-SELECT id, created_at, updated_at, name, apikey FROM users 
+SELECT id, created_at, updated_at, name, apikey, family_id FROM users 
 WHERE apikey = $1
 `
 
@@ -55,6 +56,7 @@ func (q *Queries) GetUserByApiKey(ctx context.Context, apikey string) (User, err
 		&i.UpdatedAt,
 		&i.Name,
 		&i.Apikey,
+		&i.FamilyID,
 	)
 	return i, err
 }

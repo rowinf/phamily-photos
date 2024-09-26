@@ -1,0 +1,21 @@
+<article>
+    <header>
+        <nav>
+            <ul>
+                <li>{{.Data.User.Name}}</li>
+            </ul>
+            <ul>
+                {{if .Data.Photo.IsMyPhoto}}
+                <li><button type="button" class="outline secondary" hx-delete="/photos/{{.Data.Photo.ID}}"
+                        hx-target="closest article" hx-swap="outerHTML"
+                        hx-confirm="This photo will be deleted forever and cannot be recovered. Are you sure?">delete</button>
+                </li>
+                {{end}}
+            </ul>
+        </nav>
+    </header>
+    <img src="{{.Data.Photo.Url}}">
+    <footer>
+        <p>{{call .Data.FormatDate .Data.Photo.ModifiedAt }}</p>
+    </footer>
+</article>
