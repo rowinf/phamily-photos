@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/cookiejar"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,7 +21,6 @@ import (
 	"github.com/rowinf/phamily-photos/internal"
 	"github.com/rowinf/phamily-photos/internal/database"
 	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/net/publicsuffix"
 )
 
 // Create a struct that models the structure of a user, both in the request body, and in the DB
@@ -74,7 +72,6 @@ type (
 	App struct {
 		htmx   *htmx.HTMX
 		DB     *database.Queries
-		Jar    *cookiejar.Jar
 		Router chi.Router
 	}
 )
@@ -92,15 +89,11 @@ func main() {
 	}
 
 	mux := chi.NewRouter()
-	jar, err := cookiejar.New(&cookiejar.Options{
-		PublicSuffixList: publicsuffix.List,
-	})
 	// new app with htmx instance
 	app := &App{
 		htmx:   htmx.New(),
 		DB:     database.New(db),
 		Router: mux,
-		Jar:    jar,
 	}
 
 	htmx.UseTemplateCache = false
