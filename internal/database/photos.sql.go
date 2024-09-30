@@ -124,7 +124,7 @@ func (q *Queries) GetPhoto(ctx context.Context, arg GetPhotoParams) (GetPhotoRow
 }
 
 const getPhotosByUser = `-- name: GetPhotosByUser :many
-SELECT p.id, p.created_at, p.updated_at, modified_at, p.name, alt_text, url, thumb_url, user_id, u.id, u.created_at, u.updated_at, u.name, apikey, family_id FROM photos AS p 
+SELECT p.id, p.created_at, p.updated_at, modified_at, p.name, alt_text, url, thumb_url, user_id, u.id, u.created_at, u.updated_at, u.name, apikey, family_id, password FROM photos AS p 
     JOIN users AS u ON p.user_id = u.id 
     WHERE u.id=$1
     ORDER BY p.modified_at DESC
@@ -152,6 +152,7 @@ type GetPhotosByUserRow struct {
 	Name_2      string
 	Apikey      string
 	FamilyID    sql.NullInt64
+	Password    string
 }
 
 func (q *Queries) GetPhotosByUser(ctx context.Context, arg GetPhotosByUserParams) ([]GetPhotosByUserRow, error) {
@@ -179,6 +180,7 @@ func (q *Queries) GetPhotosByUser(ctx context.Context, arg GetPhotosByUserParams
 			&i.Name_2,
 			&i.Apikey,
 			&i.FamilyID,
+			&i.Password,
 		); err != nil {
 			return nil, err
 		}

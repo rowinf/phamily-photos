@@ -36,4 +36,5 @@ type User struct {
 	Name      string
 	Apikey    string
 	FamilyID  sql.NullInt64
+	Password  string
 }

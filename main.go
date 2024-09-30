@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +21,15 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/rowinf/phamily-photos/internal"
 	"github.com/rowinf/phamily-photos/internal/database"
+	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/net/publicsuffix"
 )
+
+// Create a struct that models the structure of a user, both in the request body, and in the DB
+type Credentials struct {
+	Password string `json:"password" db:"password"`
+	Name     string `json:"name" db:"name"`
+}
 
 type BaseParams struct {
 	Id        uuid.UUID `json:"id"`
@@ -30,8 +39,24 @@ type BaseParams struct {
 
 type UserParams struct {
 	BaseParams
-	Name   string `json:"name"`
+	Name string `json:"name"`
+}
+
+type UserCreateParams struct {
+	Credentials
+	BaseParams
+	FamilyId int64 `json:"family_id"`
+}
+
+type UserLoginParams struct {
+	Credentials
+	BaseParams
 	ApiKey string `json:"apikey"`
+}
+
+type UserResponse struct {
+	BaseParams
+	Name string `json:"name" db:"name"`
 }
 
 type PhotoParams struct {
@@ -40,13 +65,21 @@ type PhotoParams struct {
 	Name       string `json:"name"`
 }
 
+type Session struct {
+	ApiKey    string
+	ExpiresAt time.Time
+}
+
 type (
 	App struct {
 		htmx   *htmx.HTMX
 		DB     *database.Queries
+		Jar    *cookiejar.Jar
 		Router chi.Router
 	}
 )
+
+var sessionStore = map[string]Session{} // In-memory session store
 
 type authedHandler func(http.ResponseWriter, *http.Request, database.User)
 
@@ -59,11 +92,15 @@ func main() {
 	}
 
 	mux := chi.NewRouter()
+	jar, err := cookiejar.New(&cookiejar.Options{
+		PublicSuffixList: publicsuffix.List,
+	})
 	// new app with htmx instance
 	app := &App{
 		htmx:   htmx.New(),
 		DB:     database.New(db),
 		Router: mux,
+		Jar:    jar,
 	}
 
 	htmx.UseTemplateCache = false
@@ -73,6 +110,7 @@ func main() {
 	mux.Use(middleware.MiddleWare)
 	mux.Use(chimiddleware.Logger)
 	mux.Get("/", app.Home)
+	mux.Get("/login", app.Login)
 	mux.Get("/photos", app.middlewareAuth(app.GetPhotosIndex))
 	mux.Get("/photos/new", app.GetPhotoNew)
 	mux.Get("/family", app.middlewareAuth(app.FamiliesGet))
@@ -81,6 +119,7 @@ func main() {
 	mux.Post("/photos", app.middlewareAuth(app.PhotoCreate))
 	mux.Post("/v1/users", app.usersCreate)
 	mux.Get("/v1/users", app.middlewareAuth(app.usersGet))
+	mux.Post("/session/new", app.sessionNew)
 	FileServer(mux, "/assets/uploads", filesDir)
 	err = http.ListenAndServe(":"+port, mux)
 	log.Fatal(err)
@@ -169,57 +208,147 @@ func (a *App) GetPhoto(w http.ResponseWriter, r *http.Request, user database.Use
 }
 
 func (a *App) usersCreate(w http.ResponseWriter, r *http.Request) {
-	body := UserParams{}
-	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(&body)
-	if err != nil {
+	body := UserCreateParams{}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		internal.RespondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	payload := database.CreateUserParams{
-		Name:      body.Name,
-		ID:        uuid.New().String(),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+	hashedPassword, perr := bcrypt.GenerateFromPassword([]byte(body.Password), 8)
+	if perr != nil {
+		internal.RespondWithError(w, http.StatusBadRequest, perr.Error())
 	}
-	user, uerr := a.DB.CreateUser(r.Context(), payload)
-	if uerr != nil {
-		internal.RespondWithError(w, http.StatusBadRequest, uerr.Error())
+
+	if user, uerr := a.DB.CreateUser(r.Context(), database.CreateUserParams{
+		ID:       uuid.NewString(),
+		Name:     body.Name,
+		Password: string(hashedPassword),
+		FamilyID: sql.NullInt64{1, true},
+	}); uerr != nil {
+		// If there is any issue with inserting into the database, return a 500 error
+		internal.RespondWithError(w, http.StatusInternalServerError, uerr.Error())
 		return
+	} else {
+		internal.RespondWithJSON(w, http.StatusCreated, UserResponse{
+			BaseParams: BaseParams{
+				Id:        uuid.MustParse(user.ID),
+				CreatedAt: user.CreatedAt.Format(time.DateTime),
+				UpdatedAt: user.UpdatedAt.Format(time.DateTime),
+			},
+			Name: user.Name,
+		})
 	}
-	internal.RespondWithJSON(w, http.StatusCreated, UserParams{
+}
+
+func (a *App) usersGet(w http.ResponseWriter, r *http.Request, user database.User) {
+	internal.RespondWithJSON(w, http.StatusOK, UserResponse{
 		BaseParams: BaseParams{
 			Id:        uuid.MustParse(user.ID),
-			CreatedAt: user.CreatedAt.String(),
-			UpdatedAt: user.UpdatedAt.String(),
+			CreatedAt: user.CreatedAt.Format(time.DateTime),
+			UpdatedAt: user.UpdatedAt.Format(time.DateTime),
 		},
-		Name:   user.Name,
-		ApiKey: user.Apikey,
+		Name: user.Name,
 	})
 }
 
-func (a *App) usersGet(w http.ResponseWriter, _ *http.Request, user database.User) {
-	internal.RespondWithJSON(w, http.StatusOK, UserParams{
-		BaseParams: BaseParams{
-			Id:        uuid.MustParse(user.ID),
-			CreatedAt: user.CreatedAt.String(),
-			UpdatedAt: user.UpdatedAt.String(),
-		},
-		ApiKey: user.Apikey,
-		Name:   user.Name,
+func (a *App) sessionNew(w http.ResponseWriter, r *http.Request) {
+	body := UserLoginParams{}
+	h := a.htmx.NewHandler(w, r)
+	contentType := r.Header.Get("Content-Type")
+	if h.IsHxRequest() {
+		http.Error(w, "htmx auth not allowed", http.StatusBadRequest)
+		return
+	}
+	if contentType == "application/json" {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			// If there is something wrong with the request body, return a 400 status
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	} else if contentType == "application/x-www-form-urlencoded" || contentType == "multipart/form-data" {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Error parsing form data", http.StatusBadRequest)
+			return
+		}
+		body.Name = r.FormValue("username")
+		body.Password = r.FormValue("password")
+	}
+	user, err := a.DB.GetUserByName(r.Context(), body.Name)
+	if err != nil {
+		// If there is an issue with the database, return a 500 error
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(body.Password)); err != nil {
+		// If the two passwords don't match, return a 401 status
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	apikey := user.Apikey
+
+	// Generate a unique session ID
+	sessionID := uuid.NewString()
+
+	// Set session expiration (e.g., 30 minutes)
+	expiration := time.Now().Add(60 * time.Minute)
+
+	// Store the session in the server (in-memory for this demo)
+	sessionStore[sessionID] = Session{
+		ApiKey:    apikey,
+		ExpiresAt: expiration,
+	}
+
+	// Set session ID in a cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_id",
+		Value:    sessionID,
+		Expires:  expiration,
+		HttpOnly: true, // Makes cookie inaccessible to JavaScript for security
 	})
+	if contentType == "application/json" {
+		internal.RespondWithJSON(w, http.StatusOK, UserResponse{
+			BaseParams: BaseParams{
+				Id:        uuid.MustParse(user.ID),
+				CreatedAt: user.CreatedAt.Format(time.DateTime),
+				UpdatedAt: user.UpdatedAt.Format(time.DateTime),
+			},
+			Name: user.Name,
+		})
+	} else if contentType == "application/x-www-form-urlencoded" || contentType == "multipart/form-data" {
+		http.Redirect(w, r, "/photos", http.StatusMovedPermanently)
+	}
 }
 
 func (a *App) middlewareAuth(handler authedHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		apiKey, err := internal.GetHeaderApiKey(w, r)
-		if err != nil {
-			internal.RespondWithError(w, http.StatusUnauthorized, "no api key")
-			return
+		contentType := r.Header.Get("Content-Type")
+		var user database.User
+		var uerr error
+		if contentType == "application/json" {
+			apikey, err := internal.GetHeaderApiKey(w, r)
+			user, uerr = a.DB.GetUserByApiKey(r.Context(), apikey)
+			if err != nil {
+				http.Error(w, "no api key", http.StatusUnauthorized)
+				return
+			}
+		} else if contentType == "application/x-www-form-urlencoded" || contentType == "multipart/form-data" {
+			cookie, err := r.Cookie("session_id")
+			if err != nil {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			sessionID := cookie.Value
+			session, exists := sessionStore[sessionID]
+
+			if !exists || session.ExpiresAt.Before(time.Now()) {
+				http.Error(w, "Session expired or invalid", http.StatusUnauthorized)
+				return
+			}
+			session.ExpiresAt = time.Now().Add(30 * time.Minute)
+			sessionStore[sessionID] = session
+			user, uerr = a.DB.GetUserByApiKey(r.Context(), session.ApiKey)
 		}
-		user, uerr := a.DB.GetUserByApiKey(r.Context(), apiKey)
 		if uerr != nil {
-			internal.RespondWithError(w, http.StatusUnauthorized, "invalid api key")
+			http.Error(w, "session invalid", http.StatusUnauthorized)
 			return
 		}
 		handler(w, r, user)
@@ -302,6 +431,16 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 	})
 }
 
+func (a *App) Login(w http.ResponseWriter, r *http.Request) {
+	h := a.htmx.NewHandler(w, r)
+	page := htmx.NewComponent("views/login.html").Wrap(mainContent(), "Content")
+
+	_, err := h.Render(r.Context(), page)
+	if err != nil {
+		fmt.Printf("error rendering page: %v", err.Error())
+	}
+}
+
 func mainContent() htmx.RenderableComponent {
 	menuItems := []struct {
 		Name string
@@ -311,6 +450,7 @@ func mainContent() htmx.RenderableComponent {
 		{"Photos", "/photos"},
 		{"New", "/photos/new"},
 		{"Family", "/family"},
+		{"Login", "/login"},
 	}
 
 	data := map[string]any{

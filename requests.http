@@ -4,7 +4,8 @@
 POST {{host}}/v1/users
 Content-Type: application/json
 {
-  "name": "Hel"
+  "name": "Lisa",
+  "password": "password"
 }
 {{
   $global.apikey=response.parsedBody.apikey
@@ -15,6 +16,11 @@ Content-Type: application/json
 GET {{host}}/v1/users
 Content-Type: application/json
 Authorization: ApiKey {{$global.apikey}}
+{
+  "name": "Lisa",
+  "password": "password",
+  "family_id": 1
+}
 {{
   $global.apikey2=response.parsedBody.apikey
 }}

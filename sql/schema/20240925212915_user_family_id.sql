@@ -9,4 +9,5 @@ ALTER TABLE IF EXISTS public.users
     NOT VALID;
 
 -- +goose Down
-ALTER TABLE IF EXISTS public.users DROP COLUMN IF EXISTS family_id;
+ALTER TABLE IF EXISTS public.users
+    DROP COLUMN IF EXISTS family_id;

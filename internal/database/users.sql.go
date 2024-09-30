@@ -7,28 +7,28 @@ package database
 
 import (
 	"context"
-	"time"
+	"database/sql"
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (id, created_at, updated_at, name, apikey)
-VALUES ($1, $2, $3, $4, encode(sha256(random()::text::bytea), 'hex'))
-RETURNING id, created_at, updated_at, name, apikey, family_id
+INSERT INTO users (id, created_at, updated_at, name, apikey, password, family_id)
+VALUES ($1, NOW(), NOW(), $2, encode(sha256(random()::text::bytea), 'hex'), $3, $4)
+RETURNING id, created_at, updated_at, name, apikey, family_id, password
 `
 
 type CreateUserParams struct {
-	ID        string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Name      string
+	ID       string
+	Name     string
+	Password string
+	FamilyID sql.NullInt64
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
 	row := q.db.QueryRowContext(ctx, createUser,
 		arg.ID,
-		arg.CreatedAt,
-		arg.UpdatedAt,
 		arg.Name,
+		arg.Password,
+		arg.FamilyID,
 	)
 	var i User
 	err := row.Scan(
@@ -38,12 +38,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Name,
 		&i.Apikey,
 		&i.FamilyID,
+		&i.Password,
 	)
 	return i, err
 }
 
 const getUserByApiKey = `-- name: GetUserByApiKey :one
-SELECT id, created_at, updated_at, name, apikey, family_id FROM users 
+SELECT id, created_at, updated_at, name, apikey, family_id, password FROM users 
 WHERE apikey = $1
 `
 
@@ -57,6 +58,27 @@ func (q *Queries) GetUserByApiKey(ctx context.Context, apikey string) (User, err
 		&i.Name,
 		&i.Apikey,
 		&i.FamilyID,
+		&i.Password,
+	)
+	return i, err
+}
+
+const getUserByName = `-- name: GetUserByName :one
+select id, created_at, updated_at, name, apikey, family_id, password from users 
+where name=$1
+`
+
+func (q *Queries) GetUserByName(ctx context.Context, name string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByName, name)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+		&i.Apikey,
+		&i.FamilyID,
+		&i.Password,
 	)
 	return i, err
 }
