@@ -122,7 +122,7 @@ func (a *App) Home(w http.ResponseWriter, r *http.Request) {
 	h := a.htmx.NewHandler(w, r)
 
 	data := map[string]any{
-		"Text": "Welcome to the home geiiiii",
+		"Text": "Welcome home",
 	}
 
 	page := htmx.NewComponent("views/home.html").SetData(data).Wrap(mainContent(), "Content")
@@ -273,7 +273,8 @@ func (a *App) sessionNew(w http.ResponseWriter, r *http.Request) {
 	}
 	if err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(body.Password)); err != nil {
 		// If the two passwords don't match, return a 401 status
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		// http.Error(w, err.Error(), http.StatusUnauthorized)
+		http.Redirect(w, r, "/login?error=invalid_credentials", http.StatusSeeOther)
 		return
 	}
 	apikey := user.Apikey
@@ -296,6 +297,8 @@ func (a *App) sessionNew(w http.ResponseWriter, r *http.Request) {
 		Value:    sessionID,
 		Expires:  expiration,
 		HttpOnly: true, // Makes cookie inaccessible to JavaScript for security
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
 	})
 	if contentType == "application/json" {
 		internal.RespondWithJSON(w, http.StatusOK, UserResponse{
@@ -307,7 +310,7 @@ func (a *App) sessionNew(w http.ResponseWriter, r *http.Request) {
 			Name: user.Name,
 		})
 	} else if contentType == "application/x-www-form-urlencoded" || contentType == "multipart/form-data" {
-		http.Redirect(w, r, "/photos", http.StatusMovedPermanently)
+		http.Redirect(w, r, "/photos", http.StatusSeeOther)
 	}
 }
 
@@ -323,10 +326,10 @@ func (a *App) middlewareAuth(handler authedHandler) http.HandlerFunc {
 				http.Error(w, "no api key", http.StatusUnauthorized)
 				return
 			}
-		} else if contentType == "application/x-www-form-urlencoded" || contentType == "multipart/form-data" {
+		} else if contentType == "" || contentType == "application/x-www-form-urlencoded" || contentType[:19] == "multipart/form-data" {
 			cookie, err := r.Cookie("session_id")
 			if err != nil {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				http.Error(w, err.Error(), http.StatusUnauthorized)
 				return
 			}
 			sessionID := cookie.Value
@@ -334,6 +337,7 @@ func (a *App) middlewareAuth(handler authedHandler) http.HandlerFunc {
 
 			if !exists || session.ExpiresAt.Before(time.Now()) {
 				http.Error(w, "Session expired or invalid", http.StatusUnauthorized)
+				http.Redirect(w, r, "/login", http.StatusSeeOther)
 				return
 			}
 			session.ExpiresAt = time.Now().Add(30 * time.Minute)
@@ -354,7 +358,7 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 	sysPath := internal.UploadFileHandler(w, r, assetPath)
 	info, err := os.Stat(sysPath)
 	if err != nil || info == nil {
-		internal.RespondWithError(w, http.StatusInternalServerError, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	paths := strings.Split(sysPath, "/")
 	fileName := paths[len(paths)-1]
@@ -370,7 +374,7 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 		AltText:    info.Name(),
 	})
 	if perr != nil {
-		internal.RespondWithError(w, http.StatusInternalServerError, perr.Error())
+		http.Error(w, perr.Error(), http.StatusInternalServerError)
 		return
 	}
 	data := map[string]any{
@@ -426,7 +430,10 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 
 func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 	h := a.htmx.NewHandler(w, r)
-	page := htmx.NewComponent("views/login.html").Wrap(mainContent(), "Content")
+	data := map[string]any{
+		"ErrorMessage": r.URL.Query().Get("error") == "invalid_credentials",
+	}
+	page := htmx.NewComponent("views/login.html").SetData(data).Wrap(mainContent(), "Content")
 
 	_, err := h.Render(r.Context(), page)
 	if err != nil {

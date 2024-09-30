@@ -1,5 +1,6 @@
 <form action="/session/new" method="POST">
   <input name="username" type="text" value="" placeholder="Username">
   <input name="password" type="password" value="" placeholder="Password">
+  {{with .Data.ErrorMessage}}<small>incorrect user name or password</small>{{end}}
   <button type="submit">Login</button>
 </form>
