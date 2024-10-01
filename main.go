@@ -104,8 +104,9 @@ func main() {
 	mux.Use(chimiddleware.Logger)
 	mux.Get("/", app.Home)
 	mux.Get("/login", app.Login)
+	mux.Get("/logout", app.Logout)
 	mux.Get("/photos", app.middlewareAuth(app.GetPhotosIndex))
-	mux.Get("/photos/new", app.GetPhotoNew)
+	mux.Get("/photos/new", app.middlewareAuth(app.GetPhotoNew))
 	mux.Get("/family", app.middlewareAuth(app.FamiliesGet))
 	mux.Delete("/photos/{photoID}", app.middlewareAuth(app.DeletePhoto))
 	mux.Get("/photos/{photoID}", app.middlewareAuth(app.GetPhoto))
@@ -133,7 +134,7 @@ func (a *App) Home(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *App) GetPhotoNew(w http.ResponseWriter, r *http.Request) {
+func (a *App) GetPhotoNew(w http.ResponseWriter, r *http.Request, _ database.User) {
 	h := a.htmx.NewHandler(w, r)
 	page := htmx.NewComponent("views/photo-new.html").Wrap(mainContent(), "Content")
 
@@ -336,8 +337,7 @@ func (a *App) middlewareAuth(handler authedHandler) http.HandlerFunc {
 			session, exists := sessionStore[sessionID]
 
 			if !exists || session.ExpiresAt.Before(time.Now()) {
-				http.Error(w, "Session expired or invalid", http.StatusUnauthorized)
-				http.Redirect(w, r, "/login", http.StatusSeeOther)
+				http.Redirect(w, r, "/login?error=redirected", http.StatusSeeOther)
 				return
 			}
 			session.ExpiresAt = time.Now().Add(30 * time.Minute)
@@ -428,10 +428,28 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 	})
 }
 
+func (a *App) Logout(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	sessionID := cookie.Value
+	session, exists := sessionStore[sessionID]
+	if !exists || session.ExpiresAt.Before(time.Now()) {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	session.ExpiresAt = time.Now()
+	sessionStore[sessionID] = session
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
 func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 	h := a.htmx.NewHandler(w, r)
 	data := map[string]any{
-		"ErrorMessage": r.URL.Query().Get("error") == "invalid_credentials",
+		"RedirectedMessage": r.URL.Query().Get("error") == "redirected",
+		"ErrorMessage":      r.URL.Query().Get("error") == "invalid_credentials",
 	}
 	page := htmx.NewComponent("views/login.html").SetData(data).Wrap(mainContent(), "Content")
 
@@ -451,6 +469,7 @@ func mainContent() htmx.RenderableComponent {
 		{"New", "/photos/new"},
 		{"Family", "/family"},
 		{"Login", "/login"},
+		{"Logout", "/logout"},
 	}
 
 	data := map[string]any{
