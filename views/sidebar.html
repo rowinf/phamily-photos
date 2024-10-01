@@ -4,7 +4,7 @@
     <ul hx-boost="true" hx-target="#content" _="on click take [@aria-current=page] from <a/> for the event's target">
         {{ range $target := .Data.MenuItems }}
         <li>
-            <a href="{{ $target.Link }}" aria-current="{{ if eq $path $target.Link }}page{{ end }}">
+            <a href="{{ $target.Link }}" aria-current="{{ if eq $path $target.Link }}page{{ end }}" hx-boost="{{ $target.BoostAttr }}">
                 {{ $target.Name }}
             </a>
         </li>

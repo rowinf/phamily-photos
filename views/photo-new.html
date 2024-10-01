@@ -1,3 +1,4 @@
+<article>
 <form action="/photos" method="POST" enctype="multipart/form-data" hx-encoding='multipart/form-data' hx-post='/photos'
     _='on htmx:xhr:progress(loaded, total) set #progress.value to (loaded/total)*100'>
     <legend>Upload your photos here</legend>
@@ -6,18 +7,10 @@
         <input name="title" type="text">
 
         <label for="photo">photo</label>
-        <input type="file" name="photo" multiple _="
-            on change(target)
-                repeat target.files.length times index i
-                    put `${target.files.item(i).lastModified}\n` at the end of next <textarea/>
-                end
-            end
-        ">
-
-        <label for="meta"></label>
-        <textarea name="meta" readonly></textarea>
+        <input type="file" name="photo" multiple>
     </fieldset>
 
     <button type="submit">submit</button>
     <progress id='progress' value='0' max='100'></progress>
 </form>
+</article>

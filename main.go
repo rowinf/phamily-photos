@@ -126,7 +126,7 @@ func (a *App) Home(w http.ResponseWriter, r *http.Request) {
 		"Text": "Welcome home",
 	}
 
-	page := htmx.NewComponent("views/home.html").SetData(data).Wrap(mainContent(), "Content")
+	page := htmx.NewComponent("views/home.html").SetData(data).Wrap(mainContent("Phamily Photos Home", navbarWithoutUser()), "Content")
 
 	_, err := h.Render(r.Context(), page)
 	if err != nil {
@@ -134,9 +134,9 @@ func (a *App) Home(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *App) GetPhotoNew(w http.ResponseWriter, r *http.Request, _ database.User) {
+func (a *App) GetPhotoNew(w http.ResponseWriter, r *http.Request, user database.User) {
 	h := a.htmx.NewHandler(w, r)
-	page := htmx.NewComponent("views/photo-new.html").Wrap(mainContent(), "Content")
+	page := htmx.NewComponent("views/photo-new.html").Wrap(mainContent("Phamily Photos Photo", navbarWithUser(user)), "Content")
 
 	_, err := h.Render(r.Context(), page)
 	if err != nil {
@@ -157,7 +157,7 @@ func (a *App) GetPhotosIndex(w http.ResponseWriter, r *http.Request, user databa
 		"Photos":     photos,
 		"FormatDate": formatDate,
 	}
-	page := htmx.NewComponent("views/photos-index.html").SetData(data).Wrap(mainContent(), "Content")
+	page := htmx.NewComponent("views/photos-index.html").SetData(data).Wrap(mainContent("Phamily Photos", navbarWithUser(user)), "Content")
 
 	_, err := h.Render(r.Context(), page)
 	if err != nil {
@@ -193,7 +193,7 @@ func (a *App) GetPhoto(w http.ResponseWriter, r *http.Request, user database.Use
 		"IsMyPhoto":  photo.IsMyPhoto,
 		"FormatDate": formatDate,
 	}
-	page := htmx.NewComponent("views/photo.html").SetData(data).Wrap(mainContent(), "Content")
+	page := htmx.NewComponent("views/photo.html").SetData(data).Wrap(mainContent("Phamily Photos Photo", navbarWithUser(user)), "Content")
 
 	_, err = h.Render(r.Context(), page)
 	if err != nil {
@@ -330,7 +330,7 @@ func (a *App) middlewareAuth(handler authedHandler) http.HandlerFunc {
 		} else if contentType == "" || contentType == "application/x-www-form-urlencoded" || contentType[:19] == "multipart/form-data" {
 			cookie, err := r.Cookie("session_id")
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusUnauthorized)
+				http.Redirect(w, r, "/login?error=redirected", http.StatusSeeOther)
 				return
 			}
 			sessionID := cookie.Value
@@ -382,7 +382,7 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 		"Photo":      photo,
 		"FormatDate": formatDate,
 	}
-	page := htmx.NewComponent("views/photo.html").SetData(data).Wrap(mainContent(), "Content")
+	page := htmx.NewComponent("views/photo.html").SetData(data).Wrap(mainContent("Phamily Photos Photo", navbarWithUser(user)), "Content")
 
 	_, err = h.Render(r.Context(), page)
 	if err != nil {
@@ -396,10 +396,13 @@ func (a *App) FamiliesGet(w http.ResponseWriter, r *http.Request, user database.
 	if err != nil {
 		internal.RespondWithErrorHtmx(h, w, http.StatusNotFound, "no family")
 	}
+	nullFamilyId := sql.NullInt64{Int64: user.FamilyID.Int64, Valid: true}
+	users, _ := a.DB.GetUsersByFamily(r.Context(), nullFamilyId)
 	data := map[string]any{
-		"Family": family,
+		"Family":        family,
+		"FamilyMembers": users,
 	}
-	page := htmx.NewComponent("views/family.html").SetData(data).Wrap(mainContent(), "Content")
+	page := htmx.NewComponent("views/family.html").SetData(data).Wrap(mainContent("Phamily Photos Families", navbarWithUser(user)), "Content")
 
 	_, herr := h.Render(r.Context(), page)
 	if herr != nil {
@@ -430,6 +433,7 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 
 func (a *App) Logout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session_id")
+
 	if err != nil {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
@@ -451,7 +455,7 @@ func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 		"RedirectedMessage": r.URL.Query().Get("error") == "redirected",
 		"ErrorMessage":      r.URL.Query().Get("error") == "invalid_credentials",
 	}
-	page := htmx.NewComponent("views/login.html").SetData(data).Wrap(mainContent(), "Content")
+	page := htmx.NewComponent("views/login.html").SetData(data).Wrap(mainContent("Phamily Photos Login", navbarWithoutUser()), "Content")
 
 	_, err := h.Render(r.Context(), page)
 	if err != nil {
@@ -459,26 +463,50 @@ func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func mainContent() htmx.RenderableComponent {
+func navbarWithoutUser() htmx.RenderableComponent {
 	menuItems := []struct {
-		Name string
-		Link string
+		Name      string
+		Link      string
+		BoostAttr string
 	}{
-		{"Home", "/"},
-		{"Photos", "/photos"},
-		{"New", "/photos/new"},
-		{"Family", "/family"},
-		{"Login", "/login"},
-		{"Logout", "/logout"},
+		{"Home", "/", "true"},
+		{"Photos", "/photos", "true"},
+		{"Login", "/login", "true"},
 	}
-
 	data := map[string]any{
-		"Title":     "Home",
 		"MenuItems": menuItems,
 	}
 
 	sidebar := htmx.NewComponent("views/sidebar.html")
-	return htmx.NewComponent("views/index.html").SetData(data).With(sidebar, "Sidebar")
+	return sidebar.SetData(data)
+}
+
+func navbarWithUser(user database.User) htmx.RenderableComponent {
+	menuItems := []struct {
+		Name      string
+		Link      string
+		BoostAttr string
+	}{
+		{"Home", "/", "true"},
+		{"Photos", "/photos", "true"},
+		{"New", "/photos/new", "true"},
+		{"Family", "/family", "true"},
+		{"Logout", "/logout", "false"},
+	}
+	data := map[string]any{
+		"User":      user,
+		"MenuItems": menuItems,
+	}
+
+	sidebar := htmx.NewComponent("views/sidebar.html")
+	return sidebar.SetData(data)
+}
+
+func mainContent(title string, navbar htmx.RenderableComponent) htmx.RenderableComponent {
+	data := map[string]any{
+		"Title": title,
+	}
+	return htmx.NewComponent("views/index.html").SetData(data).With(navbar, "Sidebar")
 }
 
 func formatDate(t time.Time) string {
