@@ -1,29 +1,15 @@
+## Requirements
+[go](https://go.dev/)
+[postgresql](https://www.postgresql.org/)
+[taskfile](https://taskfile.dev/installation)
+.env file, see .env.example
 
-## Getting Started
+create a family record in the database manually, make sure the id is 1.
 
-* If not already installed, please install the [gonew](https://pkg.go.dev/golang.org/x/tools/cmd/gonew) command.
+sign up with a new user using a rest client, see requets.http for example requests
 
-```console
-go install golang.org/x/tools/cmd/gonew@latest
-```
+## Running the app
 
-* Create a new project using this template.
-  - Second argument passed to `gonew` is a module path of your new app.
-
-```console
-gonew github.com/donseba/go-htmx/examples/render your.module/my-app # e.g. github.com/donseba/my-app
-cd my-app
-go mod tidy
-go build
-
-```
-
-## Testing 
-
-- Start your app
-
-```console
-./my-app
-```
-
-- Open your browser http://localhost:3210/
+1. `task db:init`
+2. `task dev`
+3. Open your browser http://localhost:8080/

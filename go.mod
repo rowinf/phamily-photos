@@ -13,5 +13,4 @@ require (
 require (
 	github.com/lib/pq v1.10.9
 	golang.org/x/crypto v0.27.0
-	golang.org/x/net v0.29.0
 )
