@@ -8,5 +8,10 @@ SELECT * FROM users
 WHERE apikey = $1;
 
 -- name: GetUserByName :one
-select * from users 
-where name=$1;
+select * FROM users 
+WHERE name=$1;
+
+-- name: GetUsersByFamily :many
+SELECT id, name FROM users
+WHERE family_id=$1
+ORDER BY created_at ASC;

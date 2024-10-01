@@ -64,8 +64,8 @@ func (q *Queries) GetUserByApiKey(ctx context.Context, apikey string) (User, err
 }
 
 const getUserByName = `-- name: GetUserByName :one
-select id, created_at, updated_at, name, apikey, family_id, password from users 
-where name=$1
+select id, created_at, updated_at, name, apikey, family_id, password FROM users 
+WHERE name=$1
 `
 
 func (q *Queries) GetUserByName(ctx context.Context, name string) (User, error) {
@@ -81,4 +81,38 @@ func (q *Queries) GetUserByName(ctx context.Context, name string) (User, error) 
 		&i.Password,
 	)
 	return i, err
+}
+
+const getUsersByFamily = `-- name: GetUsersByFamily :many
+SELECT id, name FROM users
+WHERE family_id=$1
+ORDER BY created_at ASC
+`
+
+type GetUsersByFamilyRow struct {
+	ID   string
+	Name string
+}
+
+func (q *Queries) GetUsersByFamily(ctx context.Context, familyID sql.NullInt64) ([]GetUsersByFamilyRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUsersByFamily, familyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUsersByFamilyRow
+	for rows.Next() {
+		var i GetUsersByFamilyRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

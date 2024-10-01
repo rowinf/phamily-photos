@@ -1,2 +1,8 @@
 <h3>{{ .Data.Family.Name }}</h3>
 <p>{{ .Data.Family.Description }}</p>
+<h3>Members</h3>
+<ul>
+    {{ range .Data.FamilyMembers }}
+    <li>{{ .Name }}</li>
+    {{end}}
+</ul>
