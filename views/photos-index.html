@@ -1,16 +1,15 @@
-{{ $formatter := .Data.FormatDate }}
 {{ range .Data.Photos}}
 <article>
     <header>
         <nav>
             <ul>
-                <li>{{.UserName}}</li>
+                <li>From {{.UserName}}</li>
             </ul>
             <ul>
                 {{if .IsMyPhoto}}
-                <li><button type="button" class="outline secondary" hx-delete="/photos/{{.ID}}" hx-target="closest article"
-                    hx-swap="outerHTML"
-                    hx-confirm="This photo will be deleted forever and cannot be recovered. Are you sure?">delete</button>
+                <li><button type="button" class="outline secondary" hx-delete="/photos/{{.ID}}"
+                        hx-target="closest article" hx-swap="outerHTML"
+                        hx-confirm="This photo will be deleted forever and cannot be recovered. Are you sure?">delete</button>
                 </li>
                 {{end}}
             </ul>
@@ -18,8 +17,9 @@
     </header>
     <img src="{{.Url}}">
     <footer>
-        <p>{{call $formatter .ModifiedAt }}</p>
+        <p>{{formatDate .ModifiedAt }}</p>
     </footer>
 </article>
-{{else}}<div>no photos</div>
+{{else}}
+<div>no photos</div>
 {{end}}

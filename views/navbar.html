@@ -1,7 +1,7 @@
 {{ $path := .URL.Path }}
 <nav>
     <h1><span>Phamily Photos</span></h1>
-    <ul hx-boost="true" hx-target="#content" _="on click take [@aria-current=page] from <a/> for the event's target">
+    <ul hx-boost="true" _="on click take [@aria-current=page] from <a/> for the event's target">
         {{ range $target := .Data.MenuItems }}
         <li>
             <a href="{{ $target.Link }}" aria-current="{{ if eq $path $target.Link }}page{{ end }}" hx-boost="{{ $target.BoostAttr }}">
