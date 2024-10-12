@@ -1,19 +1,17 @@
 ## Requirements
-- [go](https://go.dev/)
-- [postgresql](https://www.postgresql.org/)
-- [taskfile](https://taskfile.dev/installation)
-- .env file, see .env.example
+[go](https://go.dev/)
+[postgresql](https://www.postgresql.org/)
+[taskfile](https://taskfile.dev/installation)
 
-## Running the app
-
-### Setup
-1. create a family record in the database manually, make sure the id is 1.
-2. sign up with a new user using a rest client, see requets.http for example requests
-
-### Commands
-1. `task db:init`
-2. `task dev`
-3. Open your browser http://localhost:8080/
+## Setup Steps
+1. Make sure your postgres db is running on port 5432
+2. Create your .env file by starting with a copy of .env.example
+3. Update .env and fill in missing values
+3. Start the server from a terminal `$ task prod`
+4. Open another terminal window
+5. Execute command `$ task db:init`
+6. Execute command `$ task db:seed`
+7. Open your browser http://localhost:8080/
 
 ## TODO
 1. user signup UI
