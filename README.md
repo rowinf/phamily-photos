@@ -11,7 +11,8 @@
 4. Open another terminal window
 5. Execute command `$ task db:init`
 6. Execute command `$ task db:seed`
-7. Open your browser http://localhost:8080/
+7. Execute command `$ task db:migrate`
+8. Open your browser http://localhost:8080/
 
 ## TODO
 1. user signup UI
