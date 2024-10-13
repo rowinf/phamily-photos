@@ -10,8 +10,8 @@
 3. Start the server from a terminal `$ task prod`
 4. Open another terminal window
 5. Execute command `$ task db:init`
-6. Execute command `$ task db:seed`
-7. Execute command `$ task db:migrate`
+6. Execute command `$ task db:migrate`
+7. Execute command `$ task db:seed`
 8. Open your browser http://localhost:8080/
 
 ## TODO
