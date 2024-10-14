@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
+	"github.com/gorilla/sessions"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/rowinf/phamily-photos/internal"
@@ -64,19 +65,17 @@ type PhotoParams struct {
 }
 
 type Session struct {
-	ApiKey    string
-	ExpiresAt time.Time
+	ApiKey string
 }
 
 type (
 	App struct {
-		htmx   *htmx.HTMX
-		DB     *database.Queries
-		Router chi.Router
+		htmx         *htmx.HTMX
+		DB           *database.Queries
+		Router       chi.Router
+		SessionStore sessions.Store
 	}
 )
-
-var sessionStore = map[string]Session{} // In-memory session store
 
 type authedHandler func(http.ResponseWriter, *http.Request, database.User)
 
@@ -84,6 +83,7 @@ func main() {
 	godotenv.Load()
 	port := os.Getenv("PORT")
 	db, err := sql.Open("postgres", os.Getenv("GOOSE_DBSTRING"))
+	store := sessions.NewCookieStore([]byte(os.Getenv("SESSION_KEY")))
 	if err != nil {
 		panic(err.Error())
 	}
@@ -91,9 +91,10 @@ func main() {
 	mux := chi.NewRouter()
 	// new app with htmx instance
 	app := &App{
-		htmx:   htmx.New(),
-		DB:     database.New(db),
-		Router: mux,
+		htmx:         htmx.New(),
+		DB:           database.New(db),
+		Router:       mux,
+		SessionStore: store,
 	}
 
 	htmx.UseTemplateCache = false
@@ -290,28 +291,22 @@ func (a *App) sessionNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apikey := user.Apikey
-
-	// Generate a unique session ID
-	sessionID := uuid.NewString()
-
-	// Set session expiration (e.g., 30 minutes)
-	expiration := time.Now().Add(60 * time.Minute)
-
-	// Store the session in the server (in-memory for this demo)
-	sessionStore[sessionID] = Session{
-		ApiKey:    apikey,
-		ExpiresAt: expiration,
+	session, err := a.SessionStore.Get(r, "session_id")
+	if err != nil {
+		http.Error(w, "Unable to create session", http.StatusInternalServerError)
+		return
 	}
 
-	// Set session ID in a cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_id",
-		Value:    sessionID,
-		Expires:  expiration,
-		HttpOnly: true, // Makes cookie inaccessible to JavaScript for security
-		SameSite: http.SameSiteStrictMode,
-		Path:     "/",
-	})
+	// Store API key and set session expiration (e.g., 60 minutes)
+	session.Values["ApiKey"] = apikey
+
+	// Save the session
+	err = session.Save(r, w)
+	if err != nil {
+		fmt.Println(err.Error())
+		http.Error(w, "Unable to save session", http.StatusInternalServerError)
+		return
+	}
 	if contentType == "application/json" {
 		internal.RespondWithJSON(w, http.StatusOK, UserResponse{
 			BaseParams: BaseParams{
@@ -321,7 +316,7 @@ func (a *App) sessionNew(w http.ResponseWriter, r *http.Request) {
 			},
 			Name: user.Name,
 		})
-	} else if contentType == "application/x-www-form-urlencoded" || contentType == "multipart/form-data" {
+	} else {
 		http.Redirect(w, r, "/photos", http.StatusSeeOther)
 	}
 }
@@ -333,27 +328,29 @@ func (a *App) middlewareAuth(handler authedHandler) http.HandlerFunc {
 		var uerr error
 		if contentType == "application/json" {
 			apikey, err := internal.GetHeaderApiKey(w, r)
-			user, uerr = a.DB.GetUserByApiKey(r.Context(), apikey)
 			if err != nil {
 				http.Error(w, "no api key", http.StatusUnauthorized)
 				return
 			}
+			user, uerr = a.DB.GetUserByApiKey(r.Context(), apikey)
 		} else if contentType == "" || contentType == "application/x-www-form-urlencoded" || contentType[:19] == "multipart/form-data" {
-			cookie, err := r.Cookie("session_id")
+			session, err := a.SessionStore.Get(r, "session_id")
 			if err != nil {
 				http.Redirect(w, r, "/login?error=redirected", http.StatusSeeOther)
 				return
 			}
-			sessionID := cookie.Value
-			session, exists := sessionStore[sessionID]
 
-			if !exists || session.ExpiresAt.Before(time.Now()) {
-				http.Redirect(w, r, "/login?error=redirected", http.StatusSeeOther)
+			err = session.Save(r, w)
+			if err != nil {
+				http.Error(w, "unable to save session", http.StatusInternalServerError)
 				return
 			}
-			session.ExpiresAt = time.Now().Add(30 * time.Minute)
-			sessionStore[sessionID] = session
-			user, uerr = a.DB.GetUserByApiKey(r.Context(), session.ApiKey)
+
+			user, uerr = a.DB.GetUserByApiKey(r.Context(), apiKey)
+			if uerr != nil {
+				http.Error(w, "invalid session", http.StatusUnauthorized)
+				return
+			}
 		}
 		if uerr != nil {
 			http.Error(w, "session invalid", http.StatusUnauthorized)
@@ -438,20 +435,19 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 }
 
 func (a *App) Logout(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("session_id")
-
+	session, err := a.SessionStore.Get(r, "session_id")
 	if err != nil {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	sessionID := cookie.Value
-	session, exists := sessionStore[sessionID]
-	if !exists || session.ExpiresAt.Before(time.Now()) {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+
+	// Invalidate the session by clearing its values
+	session.Options.MaxAge = -1 // MaxAge of -1 tells the browser to delete the cookie
+	err = session.Save(r, w)    // Save the session changes
+	if err != nil {
+		http.Error(w, "Unable to logout", http.StatusInternalServerError)
 		return
 	}
-	session.ExpiresAt = time.Now()
-	sessionStore[sessionID] = session
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
