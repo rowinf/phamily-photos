@@ -346,6 +346,12 @@ func (a *App) middlewareAuth(handler authedHandler) http.HandlerFunc {
 				return
 			}
 
+			apiKey, ok := session.Values["ApiKey"].(string)
+			if !ok || apiKey == "" {
+				http.Error(w, "session invalid", http.StatusUnauthorized)
+				return
+			}
+
 			user, uerr = a.DB.GetUserByApiKey(r.Context(), apiKey)
 			if uerr != nil {
 				http.Error(w, "invalid session", http.StatusUnauthorized)
