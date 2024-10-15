@@ -88,23 +88,20 @@ func GetHeaderApiKey(_ http.ResponseWriter, r *http.Request) (string, error) {
 	return key, err
 }
 
-const maxUploadSize = 2 * 1024 * 1024 // 2 mb
+const maxUploadSize = 6 * 1024 * 1024 // 6 mb
 
-func UploadFileHandler(w http.ResponseWriter, r *http.Request, assetPath string) string {
-	var path string
+func UploadFileHandler(w http.ResponseWriter, r *http.Request, assetPath string) (string, error) {
 	workDir, _ := os.Getwd()
 	uploadPath := filepath.Join(workDir, assetPath)
 	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
 		fmt.Printf("Could not parse multipart form: %v\n", err)
-		RespondWithError(w, http.StatusInternalServerError, "CANT_PARSE_FORM")
-		return path
+		return uploadPath, err
 	}
 
 	// parse and validate file and post parameters
 	file, fileHeader, err := r.FormFile("photo")
 	if err != nil {
-		RespondWithError(w, http.StatusBadRequest, "INVALID_FILE")
-		return path
+		return uploadPath, err
 	}
 	defer file.Close()
 	// Get and print out file size
@@ -112,13 +109,11 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request, assetPath string)
 	fmt.Printf("File size (bytes): %v\n", fileSize)
 	// validate file size
 	if fileSize > maxUploadSize {
-		RespondWithError(w, http.StatusBadRequest, "FILE_TOO_BIG")
-		return path
+		return uploadPath, errors.New("FILE_TOO_BIG")
 	}
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
-		RespondWithError(w, http.StatusBadRequest, "INVALID_FILE")
-		return path
+		return uploadPath, err
 	}
 
 	// check file type, detectcontenttype only needs the first 512 bytes
@@ -129,15 +124,13 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request, assetPath string)
 	case "application/pdf":
 		break
 	default:
-		RespondWithError(w, http.StatusBadRequest, "INVALID_FILE_TYPE")
-		return path
+		return uploadPath, errors.New("INVALID_FILE_TYPE")
 	}
 	fileEndings, err := mime.ExtensionsByType(detectedFileType)
 	fileName := randToken(12)
 
 	if err != nil {
-		RespondWithError(w, http.StatusInternalServerError, "CANT_READ_FILE_TYPE")
-		return path
+		return uploadPath, err
 	}
 
 	newFileName := fileName + fileEndings[len(fileEndings)-1]
@@ -146,16 +139,14 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request, assetPath string)
 
 	// write file
 	newFile, err := os.Create(newPath)
-	if err != nil {
-		RespondWithError(w, http.StatusInternalServerError, "CANT_WRITE_FILE")
-		return path
-	}
 	defer newFile.Close() // idempotent, okay to call twice
-	if _, err := newFile.Write(fileBytes); err != nil || newFile.Close() != nil {
-		RespondWithError(w, http.StatusInternalServerError, "CANT_WRITE_FILE")
-		return path
+	if err != nil {
+		return newPath, err
 	}
-	return newPath
+	if _, err := newFile.Write(fileBytes); err != nil || newFile.Close() != nil {
+		return newPath, err
+	}
+	return newPath, err
 }
 
 func randToken(len int) string {

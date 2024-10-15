@@ -82,9 +82,10 @@ func (q *Queries) DeletePhoto(ctx context.Context, arg DeletePhotoParams) error 
 }
 
 const getPhoto = `-- name: GetPhoto :one
-SELECT id, created_at, updated_at, modified_at, name, alt_text, url, thumb_url, user_id, p.user_id = $2 AS is_my_photo 
+SELECT p.id, p.created_at, p.updated_at, modified_at, p.name, alt_text, url, thumb_url, user_id, u.id, u.created_at, u.updated_at, u.name, apikey, family_id, password, p.user_id = $2 AS is_my_photo, u.name AS user_name 
     FROM photos AS p
-    WHERE id=$1 AND user_id=$2
+    JOIN users AS u ON p.user_id = u.id
+    WHERE p.id=$1 AND user_id=$2
 `
 
 type GetPhotoParams struct {
@@ -93,16 +94,24 @@ type GetPhotoParams struct {
 }
 
 type GetPhotoRow struct {
-	ID         string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-	ModifiedAt time.Time
-	Name       string
-	AltText    string
-	Url        string
-	ThumbUrl   string
-	UserID     string
-	IsMyPhoto  bool
+	ID          string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	ModifiedAt  time.Time
+	Name        string
+	AltText     string
+	Url         string
+	ThumbUrl    string
+	UserID      string
+	ID_2        string
+	CreatedAt_2 time.Time
+	UpdatedAt_2 time.Time
+	Name_2      string
+	Apikey      string
+	FamilyID    sql.NullInt64
+	Password    string
+	IsMyPhoto   bool
+	UserName    string
 }
 
 func (q *Queries) GetPhoto(ctx context.Context, arg GetPhotoParams) (GetPhotoRow, error) {
@@ -118,7 +127,15 @@ func (q *Queries) GetPhoto(ctx context.Context, arg GetPhotoParams) (GetPhotoRow
 		&i.Url,
 		&i.ThumbUrl,
 		&i.UserID,
+		&i.ID_2,
+		&i.CreatedAt_2,
+		&i.UpdatedAt_2,
+		&i.Name_2,
+		&i.Apikey,
+		&i.FamilyID,
+		&i.Password,
 		&i.IsMyPhoto,
+		&i.UserName,
 	)
 	return i, err
 }

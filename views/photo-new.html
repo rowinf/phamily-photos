@@ -1,16 +1,20 @@
 <article>
-<form action="/photos" method="POST" enctype="multipart/form-data" hx-encoding='multipart/form-data' hx-boost="true" hx-push-url="true"
-    _='on htmx:xhr:progress(loaded, total) set #progress.value to (loaded/total)*100'>
-    <legend>Upload your photos here</legend>
-    <fieldset>
-        <label for="title">Title</label>
-        <input name="title" type="text">
+    <form action="/photos" method="POST" enctype="multipart/form-data" hx-encoding='multipart/form-data' hx-boost="true"
+        _="on htmx:xhr:progress(loaded, total) set #progress.value to (loaded/total)*100">
+        <legend>Upload your photos here</legend>
+        <fieldset>
+            <label for="title">Title</label>
+            <input name="title" type="text">
 
-        <label for="photo">photo</label>
-        <input type="file" name="photo" multiple>
-    </fieldset>
-
-    <button type="submit">submit</button>
-    <progress id='progress' value='0' max='100'></progress>
-</form>
+            <label for="photo">photo</label>
+            <input type="file" name="photo" multiple>
+        </fieldset>
+        {{ with .Data.Errors }}
+        {{ range . }}
+        <span>{{ . }}</span>
+        {{ end }}
+        {{ end }}
+        <button type="submit">submit</button>
+        <progress id="progress" value="0" max="100"></progress>
+    </form>
 </article>

@@ -23,9 +23,10 @@ ORDER BY p.modified_at DESC
 LIMIT $2;
 
 -- name: GetPhoto :one
-SELECT *, p.user_id = $2 AS is_my_photo 
+SELECT *, p.user_id = $2 AS is_my_photo, u.name AS user_name 
     FROM photos AS p
-    WHERE id=$1 AND user_id=$2;
+    JOIN users AS u ON p.user_id = u.id
+    WHERE p.id=$1 AND user_id=$2;
 
 -- name: DeletePhoto :exec
 DELETE FROM photos

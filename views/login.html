@@ -1,10 +1,14 @@
 <article>
   <h2>Login</h2>
   <form action="/session/new" method="POST">
-    {{with .Data.RedirectedMessage}}<small>please login first</small>{{end}}
+    {{if .Data.RedirectedMessage}}
+    <small style="color:red;">please login first</small>
+    {{end}}
     <input name="username" type="text" value="" placeholder="Username">
     <input name="password" type="password" value="" placeholder="Password">
-    {{with .Data.ErrorMessage}}<small>incorrect user name or password</small>{{end}}
+    {{if .Data.ErrorMessage}}
+    <small>incorrect user name or password</small>
+    {{end}}
     <button type="submit">Login</button>
   </form>
 </article>

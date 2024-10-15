@@ -1,21 +1,23 @@
+{{ block .Data.Photo }}
 <article>
     <header>
         <nav>
             <ul>
-                <li>{{.Data.User.Name}}</li>
+                <li>{{.UserName}}</li>
             </ul>
             <ul>
-                {{if .Data.Photo.IsMyPhoto}}
-                <li><button type="button" class="outline secondary" hx-delete="/photos/{{.Data.Photo.ID}}"
-                        hx-target="closest article" hx-swap="outerHTML"
-                        hx-confirm="This photo will be deleted forever and cannot be recovered. Are you sure?">delete</button>
+                {{if .IsMyPhoto}}
+                <li><button type="button" class="outline secondary" hx-delete="/photos/{{.ID}}"
+                            hx-target="closest article" hx-swap="outerHTML"
+                            hx-confirm="This photo will be deleted forever and cannot be recovered. Are you sure?">delete</button>
                 </li>
                 {{end}}
             </ul>
         </nav>
     </header>
-    <img src="{{.Data.Photo.Url}}">
+    <img src="{{.Url}}">
     <footer>
-        <p>{{call .Data.FormatDate .Data.Photo.ModifiedAt }}</p>
+        <p>{{ formatDate .ModifiedAt }}</p>
     </footer>
 </article>
+{{ end }}

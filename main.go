@@ -198,9 +198,7 @@ func (a *App) GetPhoto(w http.ResponseWriter, r *http.Request, user database.Use
 		return
 	}
 	data := map[string]any{
-		"User":       user,
 		"Photo":      photo,
-		"IsMyPhoto":  photo.IsMyPhoto,
 		"FormatDate": formatDate,
 	}
 	component := htmx.NewComponent("views/photo.html").SetData(data)
@@ -367,11 +365,31 @@ func (a *App) middlewareAuth(handler authedHandler) http.HandlerFunc {
 }
 
 func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.User) {
+	h := a.htmx.NewHandler(w, r)
 	assetPath := filepath.Join("assets", "uploads")
-	sysPath := internal.UploadFileHandler(w, r, assetPath)
+	sysPath, uploadErr := internal.UploadFileHandler(w, r, assetPath)
 	info, err := os.Stat(sysPath)
-	if err != nil || info == nil {
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if uploadErr != nil {
+		formData := map[string]any{
+			"Errors": []error{uploadErr},
+		}
+
+		data := map[string]any{
+			"Title": "Phamily Photos Photo",
+		}
+		component := htmx.NewComponent("views/photo-new.html").SetData(formData)
+		page := htmx.NewComponent("views/index.html").SetData(data).With(navbarWithUser(user), "Navbar")
+		page.With(component, "Content")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, herr := h.Render(r.Context(), page)
+		if herr != nil {
+			fmt.Printf("error rendering page: %v", herr.Error())
+		}
+		return
 	}
 	paths := strings.Split(sysPath, "/")
 	fileName := paths[len(paths)-1]
@@ -391,9 +409,6 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 		return
 	}
 	http.Redirect(w, r, "/photos", http.StatusSeeOther)
-	if err != nil {
-		fmt.Printf("error rendering page: %v", err.Error())
-	}
 }
 
 func (a *App) FamiliesGet(w http.ResponseWriter, r *http.Request, user database.User) {
