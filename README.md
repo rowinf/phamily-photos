@@ -1,5 +1,5 @@
 ## Requirements
-[go](https://go.dev/)
+[go 1.23](https://go.dev/)
 [postgresql](https://www.postgresql.org/)
 [taskfile](https://taskfile.dev/installation)
 
