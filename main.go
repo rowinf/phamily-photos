@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/donseba/go-htmx"
-	"github.com/donseba/go-htmx/middleware"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
@@ -102,7 +101,7 @@ func main() {
 	filesDir := http.Dir(filepath.Join(workDir, "assets", "uploads"))
 	cssDir := http.Dir(filepath.Join(workDir, "assets", "static"))
 
-	mux.Use(middleware.MiddleWare, chimiddleware.Logger)
+	mux.Use(chimiddleware.Logger)
 	mux.Get("/", app.Home)
 	mux.Get("/login", app.Login)
 	mux.Get("/logout", app.Logout)
@@ -226,7 +225,7 @@ func (a *App) usersCreate(w http.ResponseWriter, r *http.Request) {
 		ID:       uuid.NewString(),
 		Name:     body.Name,
 		Password: string(hashedPassword),
-		FamilyID: sql.NullInt64{1, true},
+		FamilyID: sql.NullInt64{Int64: 1, Valid: true},
 	}); uerr != nil {
 		// If there is any issue with inserting into the database, return a 500 error
 		internal.RespondWithError(w, http.StatusInternalServerError, uerr.Error())
@@ -366,47 +365,52 @@ func (a *App) middlewareAuth(handler authedHandler) http.HandlerFunc {
 
 func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.User) {
 	h := a.htmx.NewHandler(w, r)
+	if err := r.ParseMultipartForm(internal.MaxUploadSize); err != nil {
+		http.Error(w, "Error parsing form", http.StatusBadRequest)
+		return
+	}
 	assetPath := filepath.Join("assets", "uploads")
-	sysPath, uploadErr := internal.UploadFileHandler(w, r, assetPath)
-	info, err := os.Stat(sysPath)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if uploadErr != nil {
-		formData := map[string]any{
-			"Errors": []error{uploadErr},
-		}
+	files := r.MultipartForm.File["photo"]
 
-		data := map[string]any{
-			"Title": "Phamily Photos Photo",
-		}
-		component := htmx.NewComponent("views/photo-new.html").SetData(formData)
-		page := htmx.NewComponent("views/index.html").SetData(data).With(navbarWithUser(user), "Navbar")
-		page.With(component, "Content")
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		_, herr := h.Render(r.Context(), page)
-		if herr != nil {
-			fmt.Printf("error rendering page: %v", herr.Error())
-		}
-		return
-	}
-	paths := strings.Split(sysPath, "/")
-	fileName := paths[len(paths)-1]
-	newPath := filepath.Join("/", assetPath, fileName)
+	for fileHeader := range internal.FileGenerator(files) {
+		filePath, uploadErr := internal.SaveFile(assetPath, fileHeader)
 
-	_, perr := a.DB.CreatePhoto(r.Context(), database.CreatePhotoParams{
-		ID:         uuid.NewString(),
-		UserID:     user.ID,
-		Url:        newPath,
-		ThumbUrl:   newPath,
-		ModifiedAt: info.ModTime(),
-		Name:       info.Name(),
-		AltText:    info.Name(),
-	})
-	if perr != nil {
-		http.Error(w, perr.Error(), http.StatusBadRequest)
-		return
+		if uploadErr != nil {
+			formData := map[string]any{
+				"Errors": []error{uploadErr},
+			}
+			data := map[string]any{
+				"Title": "Phamily Photos Photo",
+			}
+			component := htmx.NewComponent("views/photo-new.html").SetData(formData)
+			page := htmx.NewComponent("views/index.html").SetData(data).With(navbarWithUser(user), "Navbar")
+			page.With(component, "Content")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, herr := h.Render(r.Context(), page)
+			if herr != nil {
+				http.Error(w, herr.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		info, err := os.Stat(filePath)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		newPath := filepath.Join("/", assetPath, info.Name())
+		_, perr := a.DB.CreatePhoto(r.Context(), database.CreatePhotoParams{
+			ID:         uuid.NewString(),
+			UserID:     user.ID,
+			Url:        newPath,
+			ThumbUrl:   newPath,
+			ModifiedAt: info.ModTime(),
+			Name:       info.Name(),
+			AltText:    info.Name(),
+		})
+		if perr != nil {
+			http.Error(w, perr.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 	http.Redirect(w, r, "/photos", http.StatusSeeOther)
 }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"mime"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -88,65 +89,97 @@ func GetHeaderApiKey(_ http.ResponseWriter, r *http.Request) (string, error) {
 	return key, err
 }
 
-const maxUploadSize = 6 * 1024 * 1024 // 6 mb
+// FileGenerator handles uploaded files and sends them over a channel
+func FileGenerator(files []*multipart.FileHeader) <-chan *multipart.FileHeader {
+	ch := make(chan *multipart.FileHeader)
 
-func UploadFileHandler(w http.ResponseWriter, r *http.Request, assetPath string) (string, error) {
-	workDir, _ := os.Getwd()
-	uploadPath := filepath.Join(workDir, assetPath)
-	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
-		fmt.Printf("Could not parse multipart form: %v\n", err)
-		return uploadPath, err
-	}
+	go func() {
+		defer close(ch)
+		for _, file := range files {
+			// Send each file over the channel
+			ch <- file
+		}
+	}()
 
-	// parse and validate file and post parameters
-	file, fileHeader, err := r.FormFile("photo")
+	return ch
+}
+
+func SaveFile(basePath string, fileHeader *multipart.FileHeader) (string, error) {
+	file, err := fileHeader.Open()
 	if err != nil {
-		return uploadPath, err
+		return "", err
 	}
 	defer file.Close()
 	// Get and print out file size
 	fileSize := fileHeader.Size
-	fmt.Printf("File size (bytes): %v\n", fileSize)
 	// validate file size
-	if fileSize > maxUploadSize {
-		return uploadPath, errors.New("FILE_TOO_BIG")
+	if fileSize > MaxUploadSize {
+		return "", errors.New("FILE_TOO_BIG")
 	}
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
-		return uploadPath, err
+		return "", err
 	}
 
 	// check file type, detectcontenttype only needs the first 512 bytes
-	detectedFileType := http.DetectContentType(fileBytes)
+	detectedFileType := http.DetectContentType(fileBytes[:512])
 	switch detectedFileType {
-	case "image/jpeg", "image/jpg":
-	case "image/gif", "image/png":
-	case "application/pdf":
+	case "image/jpeg", "image/jpg", "image/gif", "image/png", "application/pdf":
 		break
 	default:
-		return uploadPath, errors.New("INVALID_FILE_TYPE")
+		return "", errors.New("COULD_NOT_DETERMINE_FILE_EXTENSION")
 	}
 	fileEndings, err := mime.ExtensionsByType(detectedFileType)
 	fileName := randToken(12)
 
 	if err != nil {
-		return uploadPath, err
+		return "", err
 	}
 
 	newFileName := fileName + fileEndings[len(fileEndings)-1]
-	newPath := filepath.Join(uploadPath, newFileName)
-	fmt.Printf("FileType: %s, File: %s\n", detectedFileType, newPath)
+	newPath := filepath.Join(basePath, newFileName)
 
-	// write file
+	// Write file to the server
 	newFile, err := os.Create(newPath)
-	defer newFile.Close() // idempotent, okay to call twice
 	if err != nil {
-		return newPath, err
+		return "", err
 	}
-	if _, err := newFile.Write(fileBytes); err != nil || newFile.Close() != nil {
-		return newPath, err
+	defer newFile.Close()
+
+	// Write the file bytes to the new file
+	if _, err := newFile.Write(fileBytes); err != nil {
+		return "", err
+	}
+
+	// Ensure file closure is successful
+	if err := newFile.Close(); err != nil {
+		return "", err
 	}
 	return newPath, err
+}
+
+const MaxUploadSize = 10 << 20 // 10mb
+
+func UploadFileHandler(w http.ResponseWriter, r *http.Request, assetPath string) ([]string, error) {
+	workDir, _ := os.Getwd()
+	uploadPath := filepath.Join(workDir, assetPath)
+
+	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
+		fmt.Printf("Could not parse multipart form: %v\n", err)
+		return []string{}, err
+	}
+
+	// parse and validate file and post parameters
+	files := r.MultipartForm.File["photo"]
+	paths := make([]string, len(files))
+	for fileHeader := range FileGenerator(files) {
+		filePath, err := SaveFile(uploadPath, fileHeader)
+		if err != nil {
+			return []string{}, err
+		}
+		paths = append(paths, filePath)
+	}
+	return paths, nil
 }
 
 func randToken(len int) string {
