@@ -158,7 +158,7 @@ func SaveFile(basePath string, fileHeader *multipart.FileHeader) (string, error)
 	return newPath, err
 }
 
-const MaxUploadSize = 4 << 20 // 10mb
+const MaxUploadSize = 10 << 20 // 10mb
 
 func randToken(len int) string {
 	b := make([]byte, len)
