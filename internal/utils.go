@@ -158,29 +158,7 @@ func SaveFile(basePath string, fileHeader *multipart.FileHeader) (string, error)
 	return newPath, err
 }
 
-const MaxUploadSize = 10 << 20 // 10mb
-
-func UploadFileHandler(w http.ResponseWriter, r *http.Request, assetPath string) ([]string, error) {
-	workDir, _ := os.Getwd()
-	uploadPath := filepath.Join(workDir, assetPath)
-
-	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
-		fmt.Printf("Could not parse multipart form: %v\n", err)
-		return []string{}, err
-	}
-
-	// parse and validate file and post parameters
-	files := r.MultipartForm.File["photo"]
-	paths := make([]string, len(files))
-	for fileHeader := range FileGenerator(files) {
-		filePath, err := SaveFile(uploadPath, fileHeader)
-		if err != nil {
-			return []string{}, err
-		}
-		paths = append(paths, filePath)
-	}
-	return paths, nil
-}
+const MaxUploadSize = 4 << 20 // 10mb
 
 func randToken(len int) string {
 	b := make([]byte, len)

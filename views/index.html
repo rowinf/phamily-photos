@@ -29,7 +29,8 @@
         }
         function handleBeforeSwap(e) {
             if (e.detail.xhr.status === 422 || e.detail.xhr.status === 400) {
-                e.detail.shouldSwap = true; e.detail.isError = false;
+                e.detail.shouldSwap = true; 
+                e.detail.isError = false;
             }
         }
         function handleConfigRequest(e) {

@@ -3,15 +3,12 @@
         _="on htmx:xhr:progress(loaded, total) set #progress.value to (loaded/total)*100">
         <legend>Upload your photos here</legend>
         <fieldset>
-            <label for="title">Title</label>
-            <input name="title" type="text">
-
-            <label for="photo">photo</label>
-            <input type="file" name="photo" multiple>
+            <label for="photo">Select at least one photo to upload</label>
+            <input type="file" name="photo" multiple required>
         </fieldset>
         {{ with .Data.Errors }}
         {{ range . }}
-        <span>{{ . }}</span>
+        <span style="color: red;">{{ . }}</span>
         {{ end }}
         {{ end }}
         <button type="submit">submit</button>
