@@ -164,7 +164,7 @@ func (a *App) GetPhotosIndex(w http.ResponseWriter, r *http.Request, user databa
 		"Url":    "/assets/uploads/Lake-Sherwood1.jpg",
 		"Photos": photos,
 	}
-	component := htmx.NewComponent("views/photos-index.html").SetData(data)
+	component := htmx.NewComponent("views/photos-index.html", "views/photo.html").SetData(data)
 	component.AddTemplateFunction("formatDate", formatDate)
 	page := mainContentWithNavbar("Phamily Photos", navbarWithUser(user))
 	page.With(component, "Content")
@@ -198,7 +198,7 @@ func (a *App) GetPhoto(w http.ResponseWriter, r *http.Request, user database.Use
 	}
 	data := map[string]any{
 		"Photo":      photo,
-		"FormatDate": formatDate,
+		"formatDate": formatDate,
 	}
 	component := htmx.NewComponent("views/photo.html").SetData(data)
 	page := mainContentWithNavbar("Phamily Photos Photo", navbarWithUser(user))

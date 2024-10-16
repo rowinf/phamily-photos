@@ -1,25 +1,5 @@
 {{ range .Data.Photos}}
-<article>
-    <header>
-        <nav>
-            <ul>
-                <li>From {{ .UserName }}</li>
-            </ul>
-            <ul>
-                {{if .IsMyPhoto}}
-                <li><button type="button" class="outline secondary" hx-delete="/photos/{{.ID}}"
-                        hx-target="closest article" hx-swap="outerHTML"
-                        hx-confirm="This photo will be deleted forever and cannot be recovered. Are you sure?">delete</button>
-                </li>
-                {{end}}
-            </ul>
-        </nav>
-    </header>
-    <img src="{{.Url}}">
-    <footer>
-        <p>{{formatDate .ModifiedAt }}</p>
-    </footer>
-</article>
+{{ template "photo" . }}
 {{else}}
 <div>You haven't uploaded any photos, click <a href="/photos/new" hx-boost="true">here</a> to start</a></div>
 {{end}}

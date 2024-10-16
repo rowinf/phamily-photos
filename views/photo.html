@@ -1,4 +1,4 @@
-{{ block .Data.Photo }}
+{{ block "photo" .Data.Photo }}
 <article>
     <header>
         <nav>
@@ -8,8 +8,8 @@
             <ul>
                 {{if .IsMyPhoto}}
                 <li><button type="button" class="outline secondary" hx-delete="/photos/{{.ID}}"
-                            hx-target="closest article" hx-swap="outerHTML"
-                            hx-confirm="This photo will be deleted forever and cannot be recovered. Are you sure?">delete</button>
+                        hx-target="closest article" hx-swap="outerHTML"
+                        hx-confirm="This photo will be deleted forever and cannot be recovered. Are you sure?">delete</button>
                 </li>
                 {{end}}
             </ul>
