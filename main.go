@@ -71,6 +71,7 @@ type (
 	App struct {
 		htmx         *htmx.HTMX
 		DB           *database.Queries
+		OpenDB       *sql.DB
 		Router       chi.Router
 		SessionStore sessions.Store
 	}
@@ -92,6 +93,7 @@ func main() {
 	app := &App{
 		htmx:         htmx.New(),
 		DB:           database.New(db),
+		OpenDB:       db,
 		Router:       mux,
 		SessionStore: store,
 	}
@@ -372,6 +374,26 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 	assetPath := filepath.Join("assets", "uploads")
 	files := r.MultipartForm.File["photo"]
 
+	pageData := map[string]any{
+		"Title": "Phamily Photos Photo",
+	}
+	tx, err := a.OpenDB.Begin()
+	if err != nil {
+		panic(err)
+	}
+	defer tx.Rollback()
+	txq := a.DB.WithTx(tx)
+
+	post, perr := txq.CreatePost(r.Context(), database.CreatePostParams{
+		UserID:    user.ID,
+		UpdatedAt: time.Now(),
+		CreatedAt: time.Now(),
+		FamilyID:  user.FamilyID.Int64,
+	})
+	if perr != nil {
+		http.Error(w, perr.Error(), http.StatusInternalServerError)
+		return
+	}
 	for fileHeader := range internal.FileGenerator(files) {
 		filePath, uploadErr := internal.SaveFile(assetPath, fileHeader)
 
@@ -379,11 +401,8 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 			formData := map[string]any{
 				"Errors": []error{uploadErr},
 			}
-			data := map[string]any{
-				"Title": "Phamily Photos Photo",
-			}
 			component := htmx.NewComponent("views/photo-new.html").SetData(formData)
-			page := htmx.NewComponent("views/index.html").SetData(data).With(navbarWithUser(user), "Navbar")
+			page := htmx.NewComponent("views/index.html").SetData(pageData).With(navbarWithUser(user), "Navbar")
 			page.With(component, "Content")
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			_, herr := h.Render(r.Context(), page)
@@ -398,7 +417,8 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 			return
 		}
 		newPath := filepath.Join("/", assetPath, info.Name())
-		_, perr := a.DB.CreatePhoto(r.Context(), database.CreatePhotoParams{
+
+		_, perr := txq.CreatePhoto(r.Context(), database.CreatePhotoParams{
 			ID:         uuid.NewString(),
 			UserID:     user.ID,
 			Url:        newPath,
@@ -406,13 +426,25 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 			ModifiedAt: info.ModTime(),
 			Name:       info.Name(),
 			AltText:    info.Name(),
+			PostID:     sql.NullInt64{Int64: post.ID, Valid: true},
 		})
 		if perr != nil {
 			http.Error(w, perr.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
-	http.Redirect(w, r, "/photos", http.StatusSeeOther)
+	if err := tx.Commit(); err != nil {
+		panic(err)
+	}
+	h.Header().Set("HX-Location", "/photos")
+
+	page := htmx.NewComponent("views/index.html").SetData(pageData).
+		With(navbarWithUser(user), "Navbar").
+		With(htmx.NewComponent("views/photo-new.html").SetData(pageData), "Content")
+	if _, herr := h.Render(r.Context(), page); herr != nil {
+		http.Error(w, herr.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (a *App) FamiliesGet(w http.ResponseWriter, r *http.Request, user database.User) {

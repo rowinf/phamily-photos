@@ -1,6 +1,6 @@
 -- name: CreatePhoto :one
-INSERT INTO photos (id, created_at, updated_at, modified_at, name, alt_text, url, thumb_url, user_id)
-VALUES ($1, NOW(), NOW(), $2, $3, $4, $5, $6, $7)
+INSERT INTO photos (id, created_at, updated_at, modified_at, name, alt_text, url, thumb_url, user_id, post_id)
+VALUES ($1, NOW(), NOW(), $2, $3, $4, $5, $6, $7, $8)
 RETURNING *, TRUE AS is_my_photo;
 
 -- name: GetPhotosByUser :many
@@ -31,3 +31,8 @@ SELECT *, p.user_id = $2 AS is_my_photo, u.name AS user_name
 -- name: DeletePhoto :exec
 DELETE FROM photos
     WHERE id=$1 AND user_id=$2;
+
+-- name: UpdatePhotosPostId :exec
+UPDATE photos
+SET post_id = $1
+WHERE id = ANY($2::string[]);

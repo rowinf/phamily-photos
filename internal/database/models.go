@@ -27,6 +27,17 @@ type Photo struct {
 	Url        string
 	ThumbUrl   string
 	UserID     string
+	PostID     sql.NullInt64
+}
+
+type Post struct {
+	ID              int64
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	Description     string
+	FeaturedPhotoID sql.NullString
+	UserID          string
+	FamilyID        int64
 }
 
 type User struct {
