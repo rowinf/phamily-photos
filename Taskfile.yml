@@ -19,6 +19,19 @@ tasks:
       - goose up
     interactive: true
 
+  db:drop:
+    desc: Drop database and user
+    cmds:
+      - psql -h localhost -U postgres -c "DROP DATABASE {{.NEW_DB_NAME}};"
+      - psql -h localhost -U postgres -c "DROP USER {{.NEW_DB_USER}};"
+    vars:
+      NEW_DB_USER: phamilyphotos
+      NEW_DB_PASSWORD: phamilyphotos
+      NEW_DB_NAME: phamily_photos
+    env:
+      PGPASSWORD: '{{.POSTGRES_PGPASSWORD}}'
+    interactive: true
+
   db:init:
     desc: Create PostgreSQL user and initialize the database
     cmds:
