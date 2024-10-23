@@ -1,7 +1,7 @@
 package main
 
 import (
-	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -16,8 +16,10 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	"github.com/gorilla/sessions"
+	"github.com/jackc/pgx/v5"
+	_ "github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
 	"github.com/rowinf/phamily-photos/internal"
 	"github.com/rowinf/phamily-photos/internal/database"
 	"golang.org/x/crypto/bcrypt"
@@ -71,7 +73,7 @@ type (
 	App struct {
 		htmx         *htmx.HTMX
 		DB           *database.Queries
-		OpenDB       *sql.DB
+		DBConn       *pgx.Conn
 		Router       chi.Router
 		SessionStore sessions.Store
 	}
@@ -82,7 +84,7 @@ type authedHandler func(http.ResponseWriter, *http.Request, database.User)
 func main() {
 	godotenv.Load()
 	port := os.Getenv("PORT")
-	db, err := sql.Open("postgres", os.Getenv("GOOSE_DBSTRING"))
+	conn, err := pgx.Connect(context.Background(), os.Getenv("GOOSE_DBSTRING"))
 	store := sessions.NewCookieStore([]byte(os.Getenv("SESSION_KEY")))
 	if err != nil {
 		panic(err.Error())
@@ -92,8 +94,8 @@ func main() {
 	// new app with htmx instance
 	app := &App{
 		htmx:         htmx.New(),
-		DB:           database.New(db),
-		OpenDB:       db,
+		DB:           database.New(conn),
+		DBConn:       conn,
 		Router:       mux,
 		SessionStore: store,
 	}
@@ -154,19 +156,25 @@ func (a *App) GetPhotoNew(w http.ResponseWriter, r *http.Request, user database.
 	}
 }
 
+type Photo struct {
+	PhotoID       string `json:"photo_id"`
+	PhotoName     string `json:"photo_name"`
+	PhotoUrl      string `json:"photo_url"`
+	PhotoThumbUrl string `json:"photo_thumb_url"`
+}
+
 func (a *App) GetPhotosIndex(w http.ResponseWriter, r *http.Request, user database.User) {
 	h := a.htmx.NewHandler(w, r)
-	photos, _ := a.DB.GetPhotosByUserFamily(r.Context(), database.GetPhotosByUserFamilyParams{
-		UserID: user.ID,
-		Limit:  10,
+	posts, _ := a.DB.GetPostsByUserFamilyAggregated(r.Context(), database.GetPostsByUserFamilyAggregatedParams{
+		FamilyID: user.FamilyID,
+		Limit:    10,
 	})
 
 	data := map[string]any{
-		"Title":  "Photos Title",
-		"Url":    "/assets/uploads/Lake-Sherwood1.jpg",
-		"Photos": photos,
+		"Title": "Posts Title",
+		"Posts": posts,
 	}
-	component := htmx.NewComponent("views/photos-index.html", "views/photo.html").SetData(data)
+	component := htmx.NewComponent("views/posts-index.html", "views/photo.html").SetData(data)
 	component.AddTemplateFunction("formatDate", formatDate)
 	page := mainContentWithNavbar("Phamily Photos", navbarWithUser(user))
 	page.With(component, "Content")
@@ -227,7 +235,7 @@ func (a *App) usersCreate(w http.ResponseWriter, r *http.Request) {
 		ID:       uuid.NewString(),
 		Name:     body.Name,
 		Password: string(hashedPassword),
-		FamilyID: sql.NullInt64{Int64: 1, Valid: true},
+		FamilyID: pgtype.Int8{Int64: 1, Valid: true},
 	}); uerr != nil {
 		// If there is any issue with inserting into the database, return a 500 error
 		internal.RespondWithError(w, http.StatusInternalServerError, uerr.Error())
@@ -236,8 +244,8 @@ func (a *App) usersCreate(w http.ResponseWriter, r *http.Request) {
 		internal.RespondWithJSON(w, http.StatusCreated, UserResponse{
 			BaseParams: BaseParams{
 				Id:        uuid.MustParse(user.ID),
-				CreatedAt: user.CreatedAt.Format(time.DateTime),
-				UpdatedAt: user.UpdatedAt.Format(time.DateTime),
+				CreatedAt: user.CreatedAt.Time.Format(time.DateTime),
+				UpdatedAt: user.UpdatedAt.Time.Format(time.DateTime),
 			},
 			Name: user.Name,
 		})
@@ -248,8 +256,8 @@ func (a *App) usersGet(w http.ResponseWriter, r *http.Request, user database.Use
 	internal.RespondWithJSON(w, http.StatusOK, UserResponse{
 		BaseParams: BaseParams{
 			Id:        uuid.MustParse(user.ID),
-			CreatedAt: user.CreatedAt.Format(time.DateTime),
-			UpdatedAt: user.UpdatedAt.Format(time.DateTime),
+			CreatedAt: user.CreatedAt.Time.Format(time.DateTime),
+			UpdatedAt: user.UpdatedAt.Time.Format(time.DateTime),
 		},
 		Name: user.Name,
 	})
@@ -310,8 +318,8 @@ func (a *App) sessionNew(w http.ResponseWriter, r *http.Request) {
 		internal.RespondWithJSON(w, http.StatusOK, UserResponse{
 			BaseParams: BaseParams{
 				Id:        uuid.MustParse(user.ID),
-				CreatedAt: user.CreatedAt.Format(time.DateTime),
-				UpdatedAt: user.UpdatedAt.Format(time.DateTime),
+				CreatedAt: user.CreatedAt.Time.Format(time.DateTime),
+				UpdatedAt: user.UpdatedAt.Time.Format(time.DateTime),
 			},
 			Name: user.Name,
 		})
@@ -367,6 +375,7 @@ func (a *App) middlewareAuth(handler authedHandler) http.HandlerFunc {
 
 func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.User) {
 	h := a.htmx.NewHandler(w, r)
+	var form htmx.RenderableComponent
 	if err := r.ParseMultipartForm(internal.MaxUploadSize); err != nil {
 		http.Error(w, "Error parsing form", http.StatusBadRequest)
 		return
@@ -377,39 +386,37 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 	pageData := map[string]any{
 		"Title": "Phamily Photos Photo",
 	}
-	tx, err := a.OpenDB.Begin()
+	tx, err := a.DBConn.Begin(r.Context())
 	if err != nil {
 		panic(err)
 	}
-	defer tx.Rollback()
+	defer tx.Rollback(r.Context())
 	txq := a.DB.WithTx(tx)
 
 	post, perr := txq.CreatePost(r.Context(), database.CreatePostParams{
 		UserID:    user.ID,
-		UpdatedAt: time.Now(),
-		CreatedAt: time.Now(),
+		UpdatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
 		FamilyID:  user.FamilyID.Int64,
 	})
 	if perr != nil {
-		http.Error(w, perr.Error(), http.StatusInternalServerError)
+		form = uploadFormWithError(w, r, user, perr)
+		_, err := h.Render(r.Context(), form)
+		if err != nil {
+			fmt.Printf("error rendering page: %v", err.Error())
+		}
 		return
 	}
 	for fileHeader := range internal.FileGenerator(files) {
 		filePath, uploadErr := internal.SaveFile(assetPath, fileHeader)
 
 		if uploadErr != nil {
-			formData := map[string]any{
-				"Errors": []error{uploadErr},
+			form = uploadFormWithError(w, r, user, uploadErr)
+			_, err := h.Render(r.Context(), form)
+			if err != nil {
+				fmt.Printf("error rendering page: %v", err.Error())
 			}
-			component := htmx.NewComponent("views/photo-new.html").SetData(formData)
-			page := htmx.NewComponent("views/index.html").SetData(pageData).With(navbarWithUser(user), "Navbar")
-			page.With(component, "Content")
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			_, herr := h.Render(r.Context(), page)
-			if herr != nil {
-				http.Error(w, herr.Error(), http.StatusInternalServerError)
-				return
-			}
+			return
 		}
 		info, err := os.Stat(filePath)
 		if err != nil {
@@ -419,29 +426,39 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 		newPath := filepath.Join("/", assetPath, info.Name())
 
 		_, perr := txq.CreatePhoto(r.Context(), database.CreatePhotoParams{
-			ID:         uuid.NewString(),
-			UserID:     user.ID,
-			Url:        newPath,
-			ThumbUrl:   newPath,
-			ModifiedAt: info.ModTime(),
-			Name:       info.Name(),
-			AltText:    info.Name(),
-			PostID:     sql.NullInt64{Int64: post.ID, Valid: true},
+			ID:       uuid.NewString(),
+			UserID:   user.ID,
+			Url:      newPath,
+			ThumbUrl: newPath,
+			ModifiedAt: pgtype.Timestamp{
+				Time:             info.ModTime(),
+				InfinityModifier: pgtype.Finite,
+				Valid:            true,
+			},
+			Name:    info.Name(),
+			AltText: info.Name(),
+			PostID:  pgtype.Int8{Int64: post.ID, Valid: true},
 		})
 		if perr != nil {
 			http.Error(w, perr.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit(r.Context()); err != nil {
+		fmt.Println(err.Error())
 		panic(err)
 	}
-	h.Header().Set("HX-Location", "/photos")
+	posts, _ := a.DB.GetPostsByUserFamilyAggregated(r.Context(), database.GetPostsByUserFamilyAggregatedParams{
+		FamilyID: user.FamilyID,
+		Limit:    10,
+	})
+	pageData["Posts"] = posts
 
 	page := htmx.NewComponent("views/index.html").SetData(pageData).
 		With(navbarWithUser(user), "Navbar").
-		With(htmx.NewComponent("views/photo-new.html").SetData(pageData), "Content")
+		With(htmx.NewComponent("views/posts-index.html").SetData(pageData), "Content")
 	if _, herr := h.Render(r.Context(), page); herr != nil {
+		fmt.Println(err.Error())
 		http.Error(w, herr.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -453,8 +470,7 @@ func (a *App) FamiliesGet(w http.ResponseWriter, r *http.Request, user database.
 	if err != nil {
 		internal.RespondWithErrorHtmx(h, w, http.StatusNotFound, "no family")
 	}
-	nullFamilyId := sql.NullInt64{Int64: user.FamilyID.Int64, Valid: true}
-	users, _ := a.DB.GetUsersByFamily(r.Context(), nullFamilyId)
+	users, _ := a.DB.GetUsersByFamily(r.Context(), user.FamilyID)
 	data := map[string]any{
 		"Family":        family,
 		"FamilyMembers": users,
@@ -522,6 +538,20 @@ func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Printf("error rendering page: %v", err.Error())
 	}
+}
+
+func uploadFormWithError(w http.ResponseWriter, r *http.Request, user database.User, err error) htmx.RenderableComponent {
+	formData := map[string]any{
+		"Errors": []error{err},
+	}
+	pageData := map[string]any{
+		"Title": "Phamily Photos Photo",
+	}
+	component := htmx.NewComponent("views/photo-new.html").SetData(formData)
+	page := htmx.NewComponent("views/index.html").SetData(pageData).With(navbarWithUser(user), "Navbar")
+	page.With(component, "Content")
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	return page
 }
 
 func navbarWithoutUser() htmx.RenderableComponent {

@@ -5,47 +5,46 @@
 package database
 
 import (
-	"database/sql"
-	"time"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Family struct {
 	ID          int64
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	CreatedAt   pgtype.Timestamp
+	UpdatedAt   pgtype.Timestamp
 	Name        string
 	Description string
 }
 
 type Photo struct {
 	ID         string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-	ModifiedAt time.Time
+	CreatedAt  pgtype.Timestamp
+	UpdatedAt  pgtype.Timestamp
+	ModifiedAt pgtype.Timestamp
 	Name       string
 	AltText    string
 	Url        string
 	ThumbUrl   string
 	UserID     string
-	PostID     sql.NullInt64
+	PostID     pgtype.Int8
 }
 
 type Post struct {
 	ID              int64
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	CreatedAt       pgtype.Timestamp
+	UpdatedAt       pgtype.Timestamp
 	Description     string
-	FeaturedPhotoID sql.NullString
+	FeaturedPhotoID pgtype.Text
 	UserID          string
 	FamilyID        int64
 }
 
 type User struct {
 	ID        string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedAt pgtype.Timestamp
+	UpdatedAt pgtype.Timestamp
 	Name      string
 	Apikey    string
-	FamilyID  sql.NullInt64
+	FamilyID  pgtype.Int8
 	Password  string
 }

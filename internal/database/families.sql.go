@@ -7,7 +7,8 @@ package database
 
 import (
 	"context"
-	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createFamily = `-- name: CreateFamily :one
@@ -18,14 +19,14 @@ RETURNING id, created_at, updated_at, name, description
 
 type CreateFamilyParams struct {
 	ID          int64
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	CreatedAt   pgtype.Timestamp
+	UpdatedAt   pgtype.Timestamp
 	Name        string
 	Description string
 }
 
 func (q *Queries) CreateFamily(ctx context.Context, arg CreateFamilyParams) (Family, error) {
-	row := q.db.QueryRowContext(ctx, createFamily,
+	row := q.db.QueryRow(ctx, createFamily,
 		arg.ID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -49,7 +50,7 @@ WHERE id = $1
 `
 
 func (q *Queries) GetFamilyById(ctx context.Context, id int64) (Family, error) {
-	row := q.db.QueryRowContext(ctx, getFamilyById, id)
+	row := q.db.QueryRow(ctx, getFamilyById, id)
 	var i Family
 	err := row.Scan(
 		&i.ID,
@@ -71,7 +72,7 @@ WHERE id = (
 `
 
 func (q *Queries) GetUserFamily(ctx context.Context, id string) (Family, error) {
-	row := q.db.QueryRowContext(ctx, getUserFamily, id)
+	row := q.db.QueryRow(ctx, getUserFamily, id)
 	var i Family
 	err := row.Scan(
 		&i.ID,

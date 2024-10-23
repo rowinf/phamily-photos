@@ -1,0 +1,27 @@
+{{ range .Data.Posts}}
+{{ block "posts" . }}
+<article>
+    <header>
+        <nav>
+            <ul>
+                <li>{{.UserName}}</li>
+            </ul>
+            <ul>
+            </ul>
+        </nav>
+    </header>
+    <wa-carousel pagination navigation mouse-dragging loop>
+        {{ range .Photos }}
+        <wa-carousel-item>
+            <img
+                alt="The sun shines on the mountains and trees (by Adam Kool on Unsplash)"
+                src={{ index . "photo_url" }}
+            />
+        </wa-carousel-item>
+        {{ end }}
+    </wa-carousel>
+</article>
+{{ end }}
+{{else}}
+<div>You haven't uploaded any photos, click <a href="/photos/new" hx-boost="true">here</a> to start</a></div>
+{{end}}

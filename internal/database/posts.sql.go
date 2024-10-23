@@ -7,8 +7,8 @@ package database
 
 import (
 	"context"
-	"database/sql"
-	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createPost = `-- name: CreatePost :one
@@ -19,15 +19,15 @@ RETURNING id, created_at, updated_at, description, featured_photo_id, user_id, f
 
 type CreatePostParams struct {
 	Description     string
-	FeaturedPhotoID sql.NullString
+	FeaturedPhotoID pgtype.Text
 	UserID          string
 	FamilyID        int64
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	CreatedAt       pgtype.Timestamp
+	UpdatedAt       pgtype.Timestamp
 }
 
 func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, error) {
-	row := q.db.QueryRowContext(ctx, createPost,
+	row := q.db.QueryRow(ctx, createPost,
 		arg.Description,
 		arg.FeaturedPhotoID,
 		arg.UserID,
@@ -55,7 +55,7 @@ LIMIT 1
 `
 
 func (q *Queries) GetPost(ctx context.Context, id int64) (Post, error) {
-	row := q.db.QueryRowContext(ctx, getPost, id)
+	row := q.db.QueryRow(ctx, getPost, id)
 	var i Post
 	err := row.Scan(
 		&i.ID,

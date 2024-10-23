@@ -1,62 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{{ .Data.Title }}</title>
+        <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@2.0.6/css/pico.min.css">
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ .Data.Title }}</title>
-    <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@2.0.6/css/pico.min.css">
+        <link rel="stylesheet" href="/static/styles.css">
+        <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+        <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
+        <link rel="stylesheet" href="https://early.webawesome.com/webawesome@3.0.0-alpha.4/dist/themes/default.css" />
+        <script type="module" src="https://early.webawesome.com/webawesome@3.0.0-alpha.4/dist/webawesome.loader.js"></script>
 
-    <link rel="stylesheet" href="/static/styles.css">
-    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
-    <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
-    <script>
-        function toast(textContent) {
+        <script>
+            function toast(textContent) {
             // Get the snackbar DIV
-            var x = document.getElementById("snackbar");
+                var x = document.getElementById("snackbar");
 
             // Add the "show" class to DIV
-            x.className = "show";
-            x.textContent = textContent
+                x.className = "show";
+                x.textContent = textContent
 
             // After 3 seconds, remove the show class from DIV
-            setTimeout(function () { x.className = x.className.replace("show", ""); }, 3000);
-        }
-        function setupToast() {
-            document.body.addEventListener("showMessage", function (evt) {
-                toast(evt.detail.message);
-            })
-        }
-        function handleBeforeSwap(e) {
-            if (e.detail.xhr.status === 422 || e.detail.xhr.status === 400) {
-                e.detail.shouldSwap = true; 
-                e.detail.isError = false;
+                setTimeout(function () { x.className = x.className.replace("show", ""); }, 3000);
             }
-        }
-        function handleConfigRequest(e) {
-            e.detail.headers['Authorization'] = localStorage.getItem('authToken')
-        }
-    </script>
-</head>
+            function setupToast() {
+                document.body.addEventListener("showMessage", function (evt) {
+                    toast(evt.detail.message);
+                })
+            }
+            function handleBeforeSwap(e) {
+                if (e.detail.xhr.status === 422 || e.detail.xhr.status === 400) {
+                    e.detail.shouldSwap = true;
+                    e.detail.isError = false;
+                }
+            }
+            function handleConfigRequest(e) {
+                e.detail.headers['Authorization'] = localStorage.getItem('authToken')
+            }
+        </script>
+    </head>
 
-<body _="init js
+    <body _="init js
              htmx.on('htmx:configRequest', handleConfigRequest)
              htmx.on('htmx:beforeSwap', handleBeforeSwap)
              setupToast()
              end">
-    <header>
-        {{ .Partials.Navbar }}
-    </header>
-    <div class="left-side"></div>
-    <main class="container">
-        <section id="content">
-            {{ .Partials.Content }}
-        </section>
-    </main>
-    <div class="left-side"></div>
-    <footer>
-        <article id="snackbar"></article>
-    </footer>
-</body>
-
+        <header>
+            {{ .Partials.Navbar }}
+        </header>
+        <div class="left-side"></div>
+        <main class="container">
+            <section id="content">
+                {{ .Partials.Content }}
+            </section>
+        </main>
+        <div class="left-side"></div>
+        <footer>
+            <article id="snackbar"></article>
+        </footer>
+    </body>
 </html>

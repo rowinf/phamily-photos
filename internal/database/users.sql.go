@@ -7,7 +7,8 @@ package database
 
 import (
 	"context"
-	"database/sql"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createUser = `-- name: CreateUser :one
@@ -20,11 +21,11 @@ type CreateUserParams struct {
 	ID       string
 	Name     string
 	Password string
-	FamilyID sql.NullInt64
+	FamilyID pgtype.Int8
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, createUser,
+	row := q.db.QueryRow(ctx, createUser,
 		arg.ID,
 		arg.Name,
 		arg.Password,
@@ -49,7 +50,7 @@ WHERE apikey = $1
 `
 
 func (q *Queries) GetUserByApiKey(ctx context.Context, apikey string) (User, error) {
-	row := q.db.QueryRowContext(ctx, getUserByApiKey, apikey)
+	row := q.db.QueryRow(ctx, getUserByApiKey, apikey)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -69,7 +70,7 @@ WHERE name=$1
 `
 
 func (q *Queries) GetUserByName(ctx context.Context, name string) (User, error) {
-	row := q.db.QueryRowContext(ctx, getUserByName, name)
+	row := q.db.QueryRow(ctx, getUserByName, name)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -94,8 +95,8 @@ type GetUsersByFamilyRow struct {
 	Name string
 }
 
-func (q *Queries) GetUsersByFamily(ctx context.Context, familyID sql.NullInt64) ([]GetUsersByFamilyRow, error) {
-	rows, err := q.db.QueryContext(ctx, getUsersByFamily, familyID)
+func (q *Queries) GetUsersByFamily(ctx context.Context, familyID pgtype.Int8) ([]GetUsersByFamilyRow, error) {
+	rows, err := q.db.Query(ctx, getUsersByFamily, familyID)
 	if err != nil {
 		return nil, err
 	}
@@ -107,9 +108,6 @@ func (q *Queries) GetUsersByFamily(ctx context.Context, familyID sql.NullInt64) 
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

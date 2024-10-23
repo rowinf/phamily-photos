@@ -7,10 +7,8 @@ package database
 
 import (
 	"context"
-	"database/sql"
-	"time"
 
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createPhoto = `-- name: CreatePhoto :one
@@ -21,31 +19,31 @@ RETURNING id, created_at, updated_at, modified_at, name, alt_text, url, thumb_ur
 
 type CreatePhotoParams struct {
 	ID         string
-	ModifiedAt time.Time
+	ModifiedAt pgtype.Timestamp
 	Name       string
 	AltText    string
 	Url        string
 	ThumbUrl   string
 	UserID     string
-	PostID     sql.NullInt64
+	PostID     pgtype.Int8
 }
 
 type CreatePhotoRow struct {
 	ID         string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-	ModifiedAt time.Time
+	CreatedAt  pgtype.Timestamp
+	UpdatedAt  pgtype.Timestamp
+	ModifiedAt pgtype.Timestamp
 	Name       string
 	AltText    string
 	Url        string
 	ThumbUrl   string
 	UserID     string
-	PostID     sql.NullInt64
+	PostID     pgtype.Int8
 	IsMyPhoto  bool
 }
 
 func (q *Queries) CreatePhoto(ctx context.Context, arg CreatePhotoParams) (CreatePhotoRow, error) {
-	row := q.db.QueryRowContext(ctx, createPhoto,
+	row := q.db.QueryRow(ctx, createPhoto,
 		arg.ID,
 		arg.ModifiedAt,
 		arg.Name,
@@ -83,7 +81,7 @@ type DeletePhotoParams struct {
 }
 
 func (q *Queries) DeletePhoto(ctx context.Context, arg DeletePhotoParams) error {
-	_, err := q.db.ExecContext(ctx, deletePhoto, arg.ID, arg.UserID)
+	_, err := q.db.Exec(ctx, deletePhoto, arg.ID, arg.UserID)
 	return err
 }
 
@@ -101,28 +99,28 @@ type GetPhotoParams struct {
 
 type GetPhotoRow struct {
 	ID          string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	ModifiedAt  time.Time
+	CreatedAt   pgtype.Timestamp
+	UpdatedAt   pgtype.Timestamp
+	ModifiedAt  pgtype.Timestamp
 	Name        string
 	AltText     string
 	Url         string
 	ThumbUrl    string
 	UserID      string
-	PostID      sql.NullInt64
+	PostID      pgtype.Int8
 	ID_2        string
-	CreatedAt_2 time.Time
-	UpdatedAt_2 time.Time
+	CreatedAt_2 pgtype.Timestamp
+	UpdatedAt_2 pgtype.Timestamp
 	Name_2      string
 	Apikey      string
-	FamilyID    sql.NullInt64
+	FamilyID    pgtype.Int8
 	Password    string
 	IsMyPhoto   bool
 	UserName    string
 }
 
 func (q *Queries) GetPhoto(ctx context.Context, arg GetPhotoParams) (GetPhotoRow, error) {
-	row := q.db.QueryRowContext(ctx, getPhoto, arg.ID, arg.UserID)
+	row := q.db.QueryRow(ctx, getPhoto, arg.ID, arg.UserID)
 	var i GetPhotoRow
 	err := row.Scan(
 		&i.ID,
@@ -163,26 +161,26 @@ type GetPhotosByUserParams struct {
 
 type GetPhotosByUserRow struct {
 	ID          string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	ModifiedAt  time.Time
+	CreatedAt   pgtype.Timestamp
+	UpdatedAt   pgtype.Timestamp
+	ModifiedAt  pgtype.Timestamp
 	Name        string
 	AltText     string
 	Url         string
 	ThumbUrl    string
 	UserID      string
-	PostID      sql.NullInt64
+	PostID      pgtype.Int8
 	ID_2        string
-	CreatedAt_2 time.Time
-	UpdatedAt_2 time.Time
+	CreatedAt_2 pgtype.Timestamp
+	UpdatedAt_2 pgtype.Timestamp
 	Name_2      string
 	Apikey      string
-	FamilyID    sql.NullInt64
+	FamilyID    pgtype.Int8
 	Password    string
 }
 
 func (q *Queries) GetPhotosByUser(ctx context.Context, arg GetPhotosByUserParams) ([]GetPhotosByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, getPhotosByUser, arg.ID, arg.Limit)
+	rows, err := q.db.Query(ctx, getPhotosByUser, arg.ID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -213,9 +211,6 @@ func (q *Queries) GetPhotosByUser(ctx context.Context, arg GetPhotosByUserParams
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -242,21 +237,21 @@ type GetPhotosByUserFamilyParams struct {
 
 type GetPhotosByUserFamilyRow struct {
 	ID         string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-	ModifiedAt time.Time
+	CreatedAt  pgtype.Timestamp
+	UpdatedAt  pgtype.Timestamp
+	ModifiedAt pgtype.Timestamp
 	Name       string
 	AltText    string
 	Url        string
 	ThumbUrl   string
 	UserID     string
-	PostID     sql.NullInt64
+	PostID     pgtype.Int8
 	UserName   string
 	IsMyPhoto  bool
 }
 
 func (q *Queries) GetPhotosByUserFamily(ctx context.Context, arg GetPhotosByUserFamilyParams) ([]GetPhotosByUserFamilyRow, error) {
-	rows, err := q.db.QueryContext(ctx, getPhotosByUserFamily, arg.UserID, arg.Limit)
+	rows, err := q.db.Query(ctx, getPhotosByUserFamily, arg.UserID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -282,8 +277,155 @@ func (q *Queries) GetPhotosByUserFamily(ctx context.Context, arg GetPhotosByUser
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+	return items, nil
+}
+
+const getPostsByUserFamily = `-- name: GetPostsByUserFamily :many
+SELECT 
+    p.id AS post_id,
+    p.created_at AS post_created_at,
+    p.updated_at AS post_updated_at,
+    p.description AS post_description,
+    u.name AS user_name,
+    f.name AS family_name,
+    ph.id AS photo_id,
+    ph.name AS photo_name,
+    ph.url AS photo_url,
+    ph.thumb_url AS photo_thumb_url
+FROM 
+    posts p
+JOIN 
+    users u ON p.user_id = u.id
+JOIN 
+    families f ON p.family_id = f.id
+LEFT JOIN 
+    photos ph ON ph.post_id = p.id
+WHERE
+    p.family_id = $1
+ORDER BY
+    p.created_at DESC
+LIMIT $2
+`
+
+type GetPostsByUserFamilyParams struct {
+	FamilyID int64
+	Limit    int32
+}
+
+type GetPostsByUserFamilyRow struct {
+	PostID          int64
+	PostCreatedAt   pgtype.Timestamp
+	PostUpdatedAt   pgtype.Timestamp
+	PostDescription string
+	UserName        string
+	FamilyName      string
+	PhotoID         pgtype.Text
+	PhotoName       pgtype.Text
+	PhotoUrl        pgtype.Text
+	PhotoThumbUrl   pgtype.Text
+}
+
+func (q *Queries) GetPostsByUserFamily(ctx context.Context, arg GetPostsByUserFamilyParams) ([]GetPostsByUserFamilyRow, error) {
+	rows, err := q.db.Query(ctx, getPostsByUserFamily, arg.FamilyID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPostsByUserFamilyRow
+	for rows.Next() {
+		var i GetPostsByUserFamilyRow
+		if err := rows.Scan(
+			&i.PostID,
+			&i.PostCreatedAt,
+			&i.PostUpdatedAt,
+			&i.PostDescription,
+			&i.UserName,
+			&i.FamilyName,
+			&i.PhotoID,
+			&i.PhotoName,
+			&i.PhotoUrl,
+			&i.PhotoThumbUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPostsByUserFamilyAggregated = `-- name: GetPostsByUserFamilyAggregated :many
+SELECT
+    p.id AS post_id,
+    p.created_at AS post_created_at,
+    p.updated_at AS post_updated_at,
+    p.description AS post_description,
+    u.name AS user_name,
+    f.name AS family_name,
+    json_arrayagg(json_build_object(
+        'photo_id', ph.id,
+        'photo_name', ph.name,
+        'photo_url', ph.url,
+        'photo_thumb_url', ph.thumb_url
+    )) AS photos
+FROM 
+    posts p
+JOIN 
+    users u ON p.user_id = u.id
+JOIN 
+    families f ON u.family_id = f.id
+LEFT JOIN 
+    photos ph ON ph.post_id = p.id
+WHERE 
+    u.family_id = $1
+GROUP BY 
+    p.id, u.name, f.name
+ORDER BY 
+    p.created_at DESC
+LIMIT $2
+`
+
+type GetPostsByUserFamilyAggregatedParams struct {
+	FamilyID pgtype.Int8
+	Limit    int32
+}
+
+type GetPostsByUserFamilyAggregatedRow struct {
+	PostID          int64
+	PostCreatedAt   pgtype.Timestamp
+	PostUpdatedAt   pgtype.Timestamp
+	PostDescription string
+	UserName        string
+	FamilyName      string
+	Photos          interface{}
+}
+
+func (q *Queries) GetPostsByUserFamilyAggregated(ctx context.Context, arg GetPostsByUserFamilyAggregatedParams) ([]GetPostsByUserFamilyAggregatedRow, error) {
+	rows, err := q.db.Query(ctx, getPostsByUserFamilyAggregated, arg.FamilyID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPostsByUserFamilyAggregatedRow
+	for rows.Next() {
+		var i GetPostsByUserFamilyAggregatedRow
+		if err := rows.Scan(
+			&i.PostID,
+			&i.PostCreatedAt,
+			&i.PostUpdatedAt,
+			&i.PostDescription,
+			&i.UserName,
+			&i.FamilyName,
+			&i.Photos,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -298,11 +440,11 @@ WHERE id = ANY($2::string[])
 `
 
 type UpdatePhotosPostIdParams struct {
-	PostID  sql.NullInt64
+	PostID  pgtype.Int8
 	Column2 []string
 }
 
 func (q *Queries) UpdatePhotosPostId(ctx context.Context, arg UpdatePhotosPostIdParams) error {
-	_, err := q.db.ExecContext(ctx, updatePhotosPostId, arg.PostID, pq.Array(arg.Column2))
+	_, err := q.db.Exec(ctx, updatePhotosPostId, arg.PostID, arg.Column2)
 	return err
 }
