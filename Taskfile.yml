@@ -48,19 +48,3 @@ tasks:
     env:
       PGPASSWORD: '{{.POSTGRES_PGPASSWORD}}'
     interactive: true
-
-  db:seed:
-    desc: Seed database with initial familiy (start the server in separate terminal before running)
-    cmds:
-      - psql -h localhost -U {{.NEW_DB_USER}} -d {{.NEW_DB_NAME}} -c "INSERT INTO families (id, created_at, updated_at, name, description) VALUES (1, NOW(), NOW(), '{{.INITIAL_FAMILY_NAME}}', 'Your family')"
-      - |
-        curl -X POST localhost:{{.PORT}}/v1/users \
-          -H "Content-Type: application/json" \
-          -d '{"name": "{{.INITIAL_USER_NAME}}", "password": "{{.INITIAL_USER_PASSWORD}}", "family_id": 1}'
-    env:
-      PGPASSWORD: '{{.NEW_DB_PASSWORD}}'
-    vars:
-      NEW_DB_USER: phamilyphotos
-      NEW_DB_PASSWORD: phamilyphotos
-      NEW_DB_NAME: phamily_photos
-    interactive: true
