@@ -17,7 +17,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/sessions"
 	"github.com/jackc/pgx/v5"
-	_ "github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/joho/godotenv"
 	"github.com/rowinf/phamily-photos/internal"
@@ -458,7 +457,7 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 		With(navbarWithUser(user), "Navbar").
 		With(htmx.NewComponent("views/posts-index.html").SetData(pageData), "Content")
 	if _, herr := h.Render(r.Context(), page); herr != nil {
-		fmt.Println(err.Error())
+		fmt.Println(herr.Error())
 		http.Error(w, herr.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -540,7 +539,7 @@ func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func uploadFormWithError(w http.ResponseWriter, r *http.Request, user database.User, err error) htmx.RenderableComponent {
+func uploadFormWithError(w http.ResponseWriter, _ *http.Request, user database.User, err error) htmx.RenderableComponent {
 	formData := map[string]any{
 		"Errors": []error{err},
 	}

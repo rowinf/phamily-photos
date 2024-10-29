@@ -24,14 +24,14 @@ ALTER TABLE IF EXISTS public.posts
     ADD CONSTRAINT family_id_fkey FOREIGN KEY (family_id)
     REFERENCES public.families (id) MATCH SIMPLE
     ON UPDATE NO ACTION
-    ON DELETE NO ACTION
+    ON DELETE CASCADE
     NOT VALID;
 
 ALTER TABLE IF EXISTS public.posts
     ADD CONSTRAINT featured_photo_id_fkey FOREIGN KEY (featured_photo_id)
     REFERENCES public.photos (id) MATCH SIMPLE
     ON UPDATE NO ACTION
-    ON DELETE NO ACTION
+    ON DELETE CASCADE
     NOT VALID;
 
 ALTER TABLE IF EXISTS public.photos
@@ -41,7 +41,7 @@ ALTER TABLE IF EXISTS public.photos
     ADD CONSTRAINT post_id_fkey FOREIGN KEY (post_id)
     REFERENCES public.posts (id) MATCH SIMPLE
     ON UPDATE NO ACTION
-    ON DELETE NO ACTION
+    ON DELETE CASCADE
     NOT VALID;
 
 -- +goose Down
