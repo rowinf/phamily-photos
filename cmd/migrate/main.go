@@ -20,7 +20,6 @@ func main() {
 
 	arguments := []string{}
 	db, err := sql.Open("pgx", os.Getenv("GOOSE_DBSTRING"))
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 
 	if err != nil {
 		log.Fatalf("goose: failed to open DB: %v\n", err)
@@ -30,12 +29,17 @@ func main() {
 		if err := db.Close(); err != nil {
 			log.Fatalf("goose: failed to close DB: %v\n", err)
 		}
-		fmt.Printf("closing connection...")
-		cancel()
+		fmt.Printf("Database connection closed.")
 	}()
 
-	if err := goose.RunContext(ctx, "up", db, "./cmd/migrate", arguments...); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err != nil {
+		log.Fatalf("goose: failed to open DB: %v\n", err)
+	}
+
+	if err := goose.RunContext(ctx, "up", db, os.Getenv("GOOSE_MIGRATION_DIR"), arguments...); err != nil {
 		log.Fatalf("goose %v: %v", "up", err)
-		return
 	}
 }

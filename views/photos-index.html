@@ -1,5 +1,0 @@
-{{ range .Data.Photos}}
-{{ template "photo" . }}
-{{else}}
-<div>You haven't uploaded any photos, click <a href="/photos/new" hx-boost="true">here</a> to start</a></div>
-{{end}}

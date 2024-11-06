@@ -114,7 +114,6 @@ func main() {
 	mux.Delete("/photos/{photoID}", app.middlewareAuth(app.DeletePhoto))
 	mux.Get("/photos/{photoID}", app.middlewareAuth(app.GetPhoto))
 	mux.Post("/photos", app.middlewareAuth(app.PhotoCreate))
-	mux.Post("/v1/users", app.usersCreate)
 	mux.Get("/v1/users", app.middlewareAuth(app.usersGet))
 	mux.Post("/session/new", app.sessionNew)
 	FileServer(mux, "/assets/uploads", filesDir)
@@ -216,38 +215,6 @@ func (a *App) GetPhoto(w http.ResponseWriter, r *http.Request, user database.Use
 	_, err = h.Render(r.Context(), page)
 	if err != nil {
 		fmt.Printf("error rendering page: %v", err.Error())
-	}
-}
-
-func (a *App) usersCreate(w http.ResponseWriter, r *http.Request) {
-	body := UserCreateParams{}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		internal.RespondWithError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	hashedPassword, perr := bcrypt.GenerateFromPassword([]byte(body.Password), 8)
-	if perr != nil {
-		internal.RespondWithError(w, http.StatusBadRequest, perr.Error())
-	}
-
-	if user, uerr := a.DB.CreateUser(r.Context(), database.CreateUserParams{
-		ID:       uuid.NewString(),
-		Name:     body.Name,
-		Password: string(hashedPassword),
-		FamilyID: pgtype.Int8{Int64: 1, Valid: true},
-	}); uerr != nil {
-		// If there is any issue with inserting into the database, return a 500 error
-		internal.RespondWithError(w, http.StatusInternalServerError, uerr.Error())
-		return
-	} else {
-		internal.RespondWithJSON(w, http.StatusCreated, UserResponse{
-			BaseParams: BaseParams{
-				Id:        uuid.MustParse(user.ID),
-				CreatedAt: user.CreatedAt.Time.Format(time.DateTime),
-				UpdatedAt: user.UpdatedAt.Time.Format(time.DateTime),
-			},
-			Name: user.Name,
-		})
 	}
 }
 
@@ -360,7 +327,7 @@ func (a *App) middlewareAuth(handler authedHandler) http.HandlerFunc {
 
 			user, uerr = a.DB.GetUserByApiKey(r.Context(), apiKey)
 			if uerr != nil {
-				http.Error(w, "invalid session", http.StatusUnauthorized)
+				http.Redirect(w, r, "/login?error=redirected", http.StatusSeeOther)
 				return
 			}
 		}
