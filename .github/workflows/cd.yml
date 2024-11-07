@@ -34,9 +34,9 @@ jobs:
           version: '>= 363.0.0'
 
       - name: 'Deploy'
-        run: gcloud builds submit --tag us-central1-docker.pkg.dev/notely-437822/notely-ar-repo/notely:latest .
+        run: gcloud builds submit --tag us-central1-docker.pkg.dev/phamily-photos-845989893169/phamily-photos-ar-repo/phamily-photos:latest .
       - name: migrateup.sh
         run: ./scripts/migrateup.sh
       - name: 'Deploy to Cloud Run'
-        run: gcloud run deploy notely --image us-central1-docker.pkg.dev/notely-437822/notely-ar-repo/notely:latest --region us-central1 --allow-unauthenticated --project notely-437822 --max-instances=4
+        run: gcloud run deploy phamily-photos --image us-central1-docker.pkg.dev/phamily-photos-845989893169/phamily-photos-ar-repo/phamily-photos:latest --region us-central1 --allow-unauthenticated --project phamily-photos-845989893169 --max-instances=4
 
