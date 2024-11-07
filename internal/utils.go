@@ -1,9 +1,7 @@
 package internal
 
 import (
-	"context"
 	"crypto/rand"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,10 +13,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/donseba/go-htmx"
-	"github.com/pressly/goose/v3"
 )
 
 func RespondWithError(w http.ResponseWriter, code int, message string) {
@@ -168,32 +164,4 @@ func randToken(len int) string {
 	b := make([]byte, len)
 	rand.Read(b)
 	return fmt.Sprintf("%x", b)
-}
-
-func StartMigrations() {
-	dbstring := os.Getenv("GOOSE_DBSTRING")
-	dir := os.Getenv("GOOSE_MIGRATION_DIR")
-	fmt.Println(dir, dbstring)
-
-	arguments := []string{}
-	db, err := sql.Open("pgx", os.Getenv("GOOSE_DBSTRING"))
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-
-	if err != nil {
-		log.Fatalf("goose: failed to open DB: %v\n", err)
-	}
-
-	defer func() {
-		if err := db.Close(); err != nil {
-			log.Fatalf("goose: failed to close DB: %v\n", err)
-		}
-	}()
-
-	defer func() {
-		cancel()
-	}()
-
-	if err := goose.RunContext(ctx, "up", db, dir, arguments...); err != nil {
-		log.Fatalf("goose %v: %v", "up", err)
-	}
 }
