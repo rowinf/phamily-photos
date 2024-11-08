@@ -81,7 +81,9 @@ type (
 type authedHandler func(http.ResponseWriter, *http.Request, database.User)
 
 func main() {
-	godotenv.Load()
+	if err := godotenv.Load(); err != nil {
+		panic(err)
+	}
 	port := os.Getenv("PORT")
 	conn, err := pgx.Connect(context.Background(), os.Getenv("GOOSE_DBSTRING"))
 	store := sessions.NewCookieStore([]byte(os.Getenv("SESSION_KEY")))
@@ -346,7 +348,6 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 		http.Error(w, "Error parsing form", http.StatusBadRequest)
 		return
 	}
-	assetPath := filepath.Join("assets", "uploads")
 	files := r.MultipartForm.File["photo"]
 
 	pageData := map[string]any{
@@ -374,7 +375,7 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 		return
 	}
 	for fileHeader := range internal.FileGenerator(files) {
-		filePath, uploadErr := internal.SaveFile(assetPath, fileHeader)
+		filePath, uploadErr := internal.SaveFile(fileHeader)
 
 		if uploadErr != nil {
 			form = uploadFormWithError(w, r, user, uploadErr)
@@ -389,7 +390,7 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		newPath := filepath.Join("/", assetPath, info.Name())
+		newPath := filepath.Join("/", "assets", "uploads", info.Name())
 
 		_, perr := txq.CreatePhoto(r.Context(), database.CreatePhotoParams{
 			ID:       uuid.NewString(),

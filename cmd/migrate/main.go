@@ -16,7 +16,9 @@ import (
 
 func main() {
 
-	godotenv.Load()
+	if err := godotenv.Load(); err != nil {
+		panic(err)
+	}
 
 	arguments := []string{}
 	db, err := sql.Open("pgx", os.Getenv("GOOSE_DBSTRING"))
