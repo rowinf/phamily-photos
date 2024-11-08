@@ -65,7 +65,7 @@ type PhotoParams struct {
 }
 
 type Session struct {
-	ApiKey string
+	UserID string
 }
 
 type (
@@ -81,12 +81,14 @@ type (
 type authedHandler func(http.ResponseWriter, *http.Request, database.User)
 
 func main() {
-	godotenv.Load()
+	if err := godotenv.Load(); err != nil {
+		panic(err)
+	}
 	port := os.Getenv("PORT")
 	conn, err := pgx.Connect(context.Background(), os.Getenv("GOOSE_DBSTRING"))
 	store := sessions.NewCookieStore([]byte(os.Getenv("SESSION_KEY")))
 	if err != nil {
-		panic(err.Error())
+		panic(err)
 	}
 
 	mux := chi.NewRouter()
@@ -118,7 +120,14 @@ func main() {
 	mux.Post("/session/new", app.sessionNew)
 	FileServer(mux, "/assets/uploads", filesDir)
 	FileServer(mux, "/static", cssDir)
-	err = http.ListenAndServe(":"+port, mux)
+	srv := &http.Server{
+		Addr:         ":" + port,
+		Handler:      mux,
+		ReadTimeout:  5 * time.Second,  // set a custom read timeout
+		WriteTimeout: 10 * time.Second, // set a custom write timeout
+	}
+
+	err = srv.ListenAndServe()
 	log.Fatal(err)
 }
 
@@ -263,7 +272,6 @@ func (a *App) sessionNew(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?error=invalid_credentials", http.StatusSeeOther)
 		return
 	}
-	apikey := user.Apikey
 	session, err := a.SessionStore.Get(r, "session_id")
 	if err != nil {
 		http.Error(w, "Unable to create session", http.StatusInternalServerError)
@@ -271,7 +279,7 @@ func (a *App) sessionNew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Store API key and set session expiration (e.g., 60 minutes)
-	session.Values["ApiKey"] = apikey
+	session.Values["UserID"] = user.ID
 
 	// Save the session
 	err = session.Save(r, w)
@@ -299,14 +307,7 @@ func (a *App) middlewareAuth(handler authedHandler) http.HandlerFunc {
 		contentType := r.Header.Get("Content-Type")
 		var user database.User
 		var uerr error
-		if contentType == "application/json" {
-			apikey, err := internal.GetHeaderApiKey(w, r)
-			if err != nil {
-				http.Error(w, "no api key", http.StatusUnauthorized)
-				return
-			}
-			user, uerr = a.DB.GetUserByApiKey(r.Context(), apikey)
-		} else if contentType == "" || contentType == "application/x-www-form-urlencoded" || contentType[:19] == "multipart/form-data" {
+		if contentType == "" || contentType == "application/x-www-form-urlencoded" || contentType[:19] == "multipart/form-data" {
 			session, err := a.SessionStore.Get(r, "session_id")
 			if err != nil {
 				http.Redirect(w, r, "/login?error=redirected", http.StatusSeeOther)
@@ -319,13 +320,13 @@ func (a *App) middlewareAuth(handler authedHandler) http.HandlerFunc {
 				return
 			}
 
-			apiKey, ok := session.Values["ApiKey"].(string)
-			if !ok || apiKey == "" {
+			userID, ok := session.Values["UserID"].(string)
+			if !ok || userID == "" {
 				http.Error(w, "session invalid", http.StatusUnauthorized)
 				return
 			}
 
-			user, uerr = a.DB.GetUserByApiKey(r.Context(), apiKey)
+			user, uerr = a.DB.GetUserByID(r.Context(), userID)
 			if uerr != nil {
 				http.Redirect(w, r, "/login?error=redirected", http.StatusSeeOther)
 				return
@@ -346,7 +347,6 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 		http.Error(w, "Error parsing form", http.StatusBadRequest)
 		return
 	}
-	assetPath := filepath.Join("assets", "uploads")
 	files := r.MultipartForm.File["photo"]
 
 	pageData := map[string]any{
@@ -374,7 +374,7 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 		return
 	}
 	for fileHeader := range internal.FileGenerator(files) {
-		filePath, uploadErr := internal.SaveFile(assetPath, fileHeader)
+		filePath, uploadErr := internal.SaveFile(fileHeader)
 
 		if uploadErr != nil {
 			form = uploadFormWithError(w, r, user, uploadErr)
@@ -389,7 +389,7 @@ func (a *App) PhotoCreate(w http.ResponseWriter, r *http.Request, user database.
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		newPath := filepath.Join("/", assetPath, info.Name())
+		newPath := filepath.Join("/", "assets", "uploads", info.Name())
 
 		_, perr := txq.CreatePhoto(r.Context(), database.CreatePhotoParams{
 			ID:       uuid.NewString(),

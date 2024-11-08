@@ -25,15 +25,15 @@ func upAdminUser(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `
-	INSERT INTO families (id, created_at, updated_at, name, description) VALUES (1, NOW(), NOW(), '`+familyName+`', 'Admin Family')
-				`)
+	INSERT INTO families (id, created_at, updated_at, name, description) VALUES (1, NOW(), NOW(), $1, $2)`,
+		familyName, "Admin Family")
 	if err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `
 	INSERT INTO users (id, created_at, updated_at, name, apikey, password, family_id)
-	VALUES ('`+userId+`', NOW(), NOW(), '`+adminUserName+`', encode(sha256(random()::text::bytea), 'hex'), '`+string(hashedPassword)+`', 1)
-				`)
+	VALUES ($1, NOW(), NOW(), $2, encode(sha256(random()::text::bytea), 'hex'), $3, 1)`,
+		userId, adminUserName, string(hashedPassword))
 	if err != nil {
 		return err
 	}

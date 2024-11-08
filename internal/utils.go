@@ -32,7 +32,9 @@ func RespondWithError(w http.ResponseWriter, code int, message string) {
 		return
 	}
 	w.WriteHeader(code)
-	w.Write(dat)
+	if _, err := w.Write(dat); err != nil {
+		panic(err)
+	}
 }
 
 func RespondWithErrorHtmx(h *htmx.Handler, w http.ResponseWriter, code int, message string) {
@@ -53,7 +55,9 @@ func RespondWithErrorHtmx(h *htmx.Handler, w http.ResponseWriter, code int, mess
 		h.TriggerError(message)
 	}
 	w.WriteHeader(code)
-	w.Write(dat)
+	if _, err := w.Write(dat); err != nil {
+		panic(err)
+	}
 }
 
 func RespondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
@@ -69,7 +73,9 @@ func RespondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	w.Write(dat)
+	if _, err := w.Write(dat); err != nil {
+		panic(err)
+	}
 }
 
 func RespondWithOk(w http.ResponseWriter) {
@@ -104,7 +110,7 @@ func FileGenerator(files []*multipart.FileHeader) <-chan *multipart.FileHeader {
 	return ch
 }
 
-func SaveFile(basePath string, fileHeader *multipart.FileHeader) (string, error) {
+func SaveFile(fileHeader *multipart.FileHeader) (string, error) {
 	file, err := fileHeader.Open()
 	if err != nil {
 		return "", err
@@ -116,7 +122,7 @@ func SaveFile(basePath string, fileHeader *multipart.FileHeader) (string, error)
 	if fileSize > MaxUploadSize {
 		return "", errors.New("FILE_TOO_BIG")
 	}
-	fileBytes, err := io.ReadAll(file)
+	fileBytes, err := io.ReadAll(io.LimitReader(file, MaxUploadSize))
 	if err != nil {
 		return "", err
 	}
@@ -130,29 +136,22 @@ func SaveFile(basePath string, fileHeader *multipart.FileHeader) (string, error)
 		return "", errors.New("COULD_NOT_DETERMINE_FILE_EXTENSION")
 	}
 	fileEndings, err := mime.ExtensionsByType(detectedFileType)
+	if err != nil || len(fileEndings) == 0 {
+		return "", errors.New("INVALID_FILE_TYPE")
+	}
+
 	fileName := randToken(12)
+	newPath := filepath.Join("assets", "uploads", fileName) + fileEndings[len(fileEndings)-1]
+	newFile, err := os.OpenFile(filepath.Clean(newPath), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 
 	if err != nil {
 		return "", err
 	}
 
-	newFileName := fileName + fileEndings[len(fileEndings)-1]
-	newPath := filepath.Join(basePath, newFileName)
-
-	// Write file to the server
-	newFile, err := os.Create(newPath)
-	if err != nil {
-		return "", err
-	}
 	defer newFile.Close()
 
 	// Write the file bytes to the new file
 	if _, err := newFile.Write(fileBytes); err != nil {
-		return "", err
-	}
-
-	// Ensure file closure is successful
-	if err := newFile.Close(); err != nil {
 		return "", err
 	}
 	return newPath, err
@@ -162,6 +161,8 @@ const MaxUploadSize = 10 << 20 // 10mb
 
 func randToken(len int) string {
 	b := make([]byte, len)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
 	return fmt.Sprintf("%x", b)
 }
