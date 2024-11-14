@@ -82,7 +82,7 @@ type authedHandler func(http.ResponseWriter, *http.Request, database.User)
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		panic(err)
+		log.Printf("warning: assuming default configuration. .env unreadable: %v", err)
 	}
 	port := os.Getenv("PORT")
 	conn, err := pgx.Connect(context.Background(), os.Getenv("GOOSE_DBSTRING"))
