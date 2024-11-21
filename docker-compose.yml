@@ -1,0 +1,30 @@
+version: '3.9'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - GOOSE_DRIVER=postgres
+      - GOOSE_DBSTRING=postgres://postgres:postgres@postgres:5432/postgres
+      - GOOSE_MIGRATION_DIR=./cmd/migrate
+      - PORT=8080
+
+    ports:
+      - "8080:8080"  # Exposes port 8080 for the Go application
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"  # Exposes PostgreSQL's default port
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
+

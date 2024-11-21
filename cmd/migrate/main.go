@@ -15,14 +15,12 @@ import (
 )
 
 func main() {
-
 	if err := godotenv.Load(); err != nil {
-		panic(err)
+		log.Printf("warning: assuming default configuration. .env unreadable: %v", err)
 	}
 
 	arguments := []string{}
 	db, err := sql.Open("pgx", os.Getenv("GOOSE_DBSTRING"))
-
 	if err != nil {
 		log.Fatalf("goose: failed to open DB: %v\n", err)
 	}

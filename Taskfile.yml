@@ -16,9 +16,7 @@ tasks:
   db:migrate:
     desc: run migrations with goose
     cmds:
-      - go build -o goose-custom ./cmd/migrate/*.go
-      - ./goose-custom
-      - rm ./goose-custom
+      - ./scripts/migrateup.sh
     interactive: true
 
   db:drop:
