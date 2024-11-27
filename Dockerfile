@@ -13,7 +13,6 @@ COPY . .
 
 # Build the application
 RUN go build -o phamily-photos .
-RUN go install github.com/go-task/task/v3/cmd/task@latest
 
 # Expose the port the app runs on
 EXPOSE 8080

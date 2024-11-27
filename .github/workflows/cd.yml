@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GOOSE_DBSTRING: ${{ secrets.GOOSE_DBSTRING }}
+      INITIAL_FAMILY_NAME: "Lopes-Irwin family"
+      INITIAL_USER_NAME: Rob
+      INITIAL_USER_PASSWORD: ${{ secrets.INITIAL_USER_PASSWORD }}
     steps:
       - name: Check out code
         uses: actions/checkout@v4

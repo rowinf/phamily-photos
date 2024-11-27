@@ -38,7 +38,7 @@ tasks:
       - psql -h localhost -U postgres -c "CREATE USER {{.NEW_DB_USER}} WITH PASSWORD '{{.NEW_DB_PASSWORD}}';"
       - psql -h localhost -U postgres -c "CREATE DATABASE {{.NEW_DB_NAME}} OWNER {{.NEW_DB_USER}};"
       - psql -h localhost -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE {{.NEW_DB_NAME}} TO {{.NEW_DB_USER}};"
-      - psql -h localhost -U postgres -d {{.NEW_DB_NAME}} -c "GRANT ALL ON SCHEMA public TO {{.NEW_DB_USER}};" 
+      - psql -h localhost -U postgres -d {{.NEW_DB_NAME}} -c "GRANT ALL ON SCHEMA public TO {{.NEW_DB_USER}};"
     vars:
       NEW_DB_USER: phamilyphotos
       NEW_DB_PASSWORD: phamilyphotos

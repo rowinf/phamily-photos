@@ -19,4 +19,5 @@ phamily-photos
 tmp/main
 tmp/build-errors.log
 .env
+.env.*
 assets/uploads/*

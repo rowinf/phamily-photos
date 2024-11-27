@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,7 +14,7 @@ import (
 
 	"github.com/donseba/go-htmx"
 	"github.com/go-chi/chi/v5"
-	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httplog"
 	"github.com/google/uuid"
 	"github.com/gorilla/sessions"
 	"github.com/jackc/pgx/v5"
@@ -100,13 +101,23 @@ func main() {
 		Router:       mux,
 		SessionStore: store,
 	}
+	logger := httplog.NewLogger("httplog-example", httplog.Options{
+		// JSON:             true,
+		LogLevel: slog.LevelDebug.String(),
+		Concise:  true,
+		// TimeFieldFormat: time.RFC850,
+		Tags: map[string]string{
+			"version": "v1.0",
+			"env":     "dev",
+		},
+	})
 
 	htmx.UseTemplateCache = false
 	workDir, _ := os.Getwd()
 	filesDir := http.Dir(filepath.Join(workDir, "assets", "uploads"))
 	cssDir := http.Dir(filepath.Join(workDir, "assets", "static"))
 
-	mux.Use(chimiddleware.Logger)
+	mux.Use(httplog.RequestLogger(logger))
 	mux.Get("/", app.Home)
 	mux.Get("/login", app.Login)
 	mux.Get("/logout", app.Logout)
@@ -274,7 +285,7 @@ func (a *App) sessionNew(w http.ResponseWriter, r *http.Request) {
 	}
 	session, err := a.SessionStore.Get(r, "session_id")
 	if err != nil {
-		http.Error(w, "Unable to create session", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
